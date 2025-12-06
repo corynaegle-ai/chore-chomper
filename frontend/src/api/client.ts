@@ -54,6 +54,70 @@ export interface ApiResponse<T = unknown> {
   error?: { code: string; message: string; details?: unknown };
 }
 
+// Types
+export interface User {
+  id: string;
+  name: string;
+  email?: string;
+  role: 'PARENT' | 'CHILD';
+  pointsBalance: number;
+  avatarPreset?: string;
+  avatarUrl?: string;
+  phoneNumber?: string;
+  isActive: boolean;
+  family?: Family;
+}
+
+export interface Family {
+  id: string;
+  name: string;
+  inviteCode: string;
+}
+
+export interface Category {
+  id: string;
+  name: string;
+  color: string;
+  icon?: string;
+}
+
+export interface Chore {
+  id: string;
+  name: string;
+  description?: string;
+  pointValue: number;
+  status: 'PENDING' | 'COMPLETED' | 'VERIFIED' | 'REJECTED';
+  dueDate?: string;
+  completedAt?: string;
+  verifiedAt?: string;
+  photoUrl?: string;
+  completionNotes?: string;
+  verificationNotes?: string;
+  assignedTo: {
+    id: string;
+    name: string;
+    avatarPreset?: string;
+    avatarUrl?: string;
+  };
+  category?: Category;
+  verifiedBy?: {
+    id: string;
+    name: string;
+  };
+}
+
+export interface FamilyStats {
+  parents: number;
+  children: number;
+  chores: {
+    pending: number;
+    awaitingVerification: number;
+    completed: number;
+  };
+  pendingRedemptions: number;
+}
+
+// Auth API
 export const authApi = {
   register: (data: { email: string; password: string; name: string; familyName: string }) =>
     api.post<ApiResponse>("/auth/register", data),
@@ -67,22 +131,59 @@ export const authApi = {
   logout: () => api.post<ApiResponse>("/auth/logout"),
 };
 
+// User API
 export const userApi = {
-  getAll: () => api.get<ApiResponse>("/users"),
-  getChildren: () => api.get<ApiResponse>("/users/children"),
-  getById: (id: string) => api.get<ApiResponse>(`/users/${id}`),
+  getAll: () => api.get<ApiResponse<User[]>>("/users"),
+  getChildren: () => api.get<ApiResponse<User[]>>("/users/children"),
+  getById: (id: string) => api.get<ApiResponse<User>>(`/users/${id}`),
   createChild: (data: { name: string; pin: string; phoneNumber?: string; avatarPreset?: string }) =>
-    api.post<ApiResponse>("/users/child", data),
+    api.post<ApiResponse<User>>("/users/child", data),
   update: (id: string, data: { name?: string; phoneNumber?: string; avatarUrl?: string; avatarPreset?: string }) =>
-    api.put<ApiResponse>(`/users/${id}`, data),
+    api.put<ApiResponse<User>>(`/users/${id}`, data),
   resetPin: (id: string, pin: string) =>
     api.post<ApiResponse>(`/users/${id}/reset-pin`, { pin }),
   deactivate: (id: string) => api.delete<ApiResponse>(`/users/${id}`),
 };
 
+// Family API
 export const familyApi = {
-  get: () => api.get<ApiResponse>("/family"),
-  update: (name: string) => api.put<ApiResponse>("/family", { name }),
-  regenerateCode: () => api.post<ApiResponse>("/family/regenerate-code"),
-  getStats: () => api.get<ApiResponse>("/family/stats"),
+  get: () => api.get<ApiResponse<Family>>("/family"),
+  update: (name: string) => api.put<ApiResponse<Family>>("/family", { name }),
+  regenerateCode: () => api.post<ApiResponse<Family>>("/family/regenerate-code"),
+  getStats: () => api.get<ApiResponse<FamilyStats>>("/family/stats"),
+};
+
+// Chore API
+export const choreApi = {
+  getAll: (params?: { status?: string; assignedToId?: string; categoryId?: string }) =>
+    api.get<ApiResponse<Chore[]>>("/chores", { params }),
+  getById: (id: string) => api.get<ApiResponse<Chore>>(`/chores/${id}`),
+  getMy: (status?: string) =>
+    api.get<ApiResponse<Chore[]>>("/chores/my", { params: status ? { status } : undefined }),
+  getPendingVerification: () => api.get<ApiResponse<Chore[]>>("/chores/pending-verification"),
+  create: (data: {
+    name: string;
+    description?: string;
+    categoryId?: string;
+    assignedToId: string;
+    pointValue?: number;
+    dueDate?: string;
+  }) => api.post<ApiResponse<Chore>>("/chores", data),
+  update: (id: string, data: {
+    name?: string;
+    description?: string;
+    categoryId?: string | null;
+    assignedToId?: string;
+    pointValue?: number;
+    dueDate?: string | null;
+  }) => api.put<ApiResponse<Chore>>(`/chores/${id}`, data),
+  complete: (id: string, data?: { photoUrl?: string; notes?: string }) =>
+    api.post<ApiResponse<Chore>>(`/chores/${id}/complete`, data || {}),
+  addPhoto: (id: string, photoUrl: string) =>
+    api.post<ApiResponse<Chore>>(`/chores/${id}/add-photo`, { photoUrl }),
+  verify: (id: string, data: { approved: boolean; feedback?: string; pointsPenalty?: number }) =>
+    api.post<ApiResponse<Chore>>(`/chores/${id}/verify`, data),
+  reset: (id: string) => api.post<ApiResponse<Chore>>(`/chores/${id}/reset`),
+  delete: (id: string) => api.delete<ApiResponse>(`/chores/${id}`),
+  bulkDelete: (ids: string[]) => api.delete<ApiResponse>("/chores/bulk", { data: { ids } }),
 };

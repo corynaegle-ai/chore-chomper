@@ -1,13 +1,43 @@
+import { useState } from 'react';
+import { Routes, Route, NavLink, Navigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { LogOut, Users, ClipboardList, Gift, Settings } from 'lucide-react';
+import { 
+  LogOut, Home, Users, ClipboardList, Gift, Settings, Menu, X, 
+  RefreshCw, Copy, Check
+} from 'lucide-react';
+
+// Sub-pages
+import DashboardHome from './DashboardHome';
+import ChildrenPage from './ChildrenPage';
+import ChoresPage from './ChoresPage';
+import VerifyChores from './VerifyChores';
 
 export default function ParentDashboard() {
   const { user, logout } = useAuth();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const copyFamilyCode = () => {
+    if (user?.family?.inviteCode) {
+      navigator.clipboard.writeText(user.family.inviteCode);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  const navItems = [
+    { to: '/parent', icon: Home, label: 'Dashboard', end: true },
+    { to: '/parent/children', icon: Users, label: 'Children' },
+    { to: '/parent/chores', icon: ClipboardList, label: 'Chores' },
+    { to: '/parent/verify', icon: RefreshCw, label: 'Verify' },
+    { to: '/parent/rewards', icon: Gift, label: 'Rewards' },
+    { to: '/parent/settings', icon: Settings, label: 'Settings' },
+  ];
 
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <header className="bg-white shadow-sm">
+      <header className="bg-white shadow-sm sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center gap-3">
@@ -17,123 +47,75 @@ export default function ParentDashboard() {
               </span>
             </div>
             
+            {/* Desktop nav */}
+            <nav className="hidden md:flex items-center gap-1">
+              {navItems.map(({ to, icon: Icon, label, end }) => (
+                <NavLink
+                  key={to}
+                  to={to}
+                  end={end}
+                  className={({ isActive }) =>
+                    `px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors ${
+                      isActive
+                        ? 'bg-chomper-100 text-chomper-700'
+                        : 'text-gray-600 hover:bg-gray-100'
+                    }`
+                  }
+                >
+                  <Icon className="w-4 h-4" />
+                  {label}
+                </NavLink>
+              ))}
+            </nav>
+
             <div className="flex items-center gap-4">
-              <span className="text-gray-600">
-                Hi, {user?.name}!
-              </span>
-              <button
-                onClick={logout}
-                className="p-2 text-gray-500 hover:text-gray-700 rounded-lg hover:bg-gray-100"
-                title="Logout"
-              >
+              <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-gray-100 rounded-lg">
+                <span className="text-xs text-gray-500">Code:</span>
+                <span className="font-mono font-bold text-chomper-600">
+                  {user?.family?.inviteCode}
+                </span>
+                <button onClick={copyFamilyCode} className="p-1 hover:bg-gray-200 rounded">
+                  {copied ? <Check className="w-3.5 h-3.5 text-green-600" /> : <Copy className="w-3.5 h-3.5 text-gray-500" />}
+                </button>
+              </div>
+              
+              <span className="hidden lg:block text-gray-600">{user?.name}</span>
+              
+              <button onClick={logout} className="p-2 text-gray-500 hover:text-gray-700 rounded-lg hover:bg-gray-100" title="Logout">
                 <LogOut className="w-5 h-5" />
+              </button>
+
+              <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="md:hidden p-2 text-gray-500 hover:text-gray-700 rounded-lg hover:bg-gray-100">
+                {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
               </button>
             </div>
           </div>
         </div>
+
+        {/* Mobile nav */}
+        {mobileMenuOpen && (
+          <nav className="md:hidden border-t bg-white px-4 py-2">
+            {navItems.map(({ to, icon: Icon, label, end }) => (
+              <NavLink key={to} to={to} end={end} onClick={() => setMobileMenuOpen(false)}
+                className={({ isActive }) => `block px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 ${isActive ? 'bg-chomper-100 text-chomper-700' : 'text-gray-600 hover:bg-gray-100'}`}>
+                <Icon className="w-4 h-4" />
+                {label}
+              </NavLink>
+            ))}
+          </nav>
+        )}
       </header>
 
-      {/* Main content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Welcome section */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">
-            Welcome to {user?.family?.name}!
-          </h1>
-          <p className="mt-2 text-gray-600">
-            Family Code: <span className="font-mono font-bold text-chomper-600">{user?.family?.inviteCode}</span>
-            <span className="text-sm ml-2">(Share with other parents to join)</span>
-          </p>
-        </div>
-
-        {/* Quick stats */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          <div className="card p-6">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-blue-100 rounded-lg">
-                <Users className="w-6 h-6 text-blue-600" />
-              </div>
-              <div>
-                <p className="text-sm text-gray-500">Children</p>
-                <p className="text-2xl font-bold">0</p>
-              </div>
-            </div>
-          </div>
-          
-          <div className="card p-6">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-yellow-100 rounded-lg">
-                <ClipboardList className="w-6 h-6 text-yellow-600" />
-              </div>
-              <div>
-                <p className="text-sm text-gray-500">Pending Chores</p>
-                <p className="text-2xl font-bold">0</p>
-              </div>
-            </div>
-          </div>
-          
-          <div className="card p-6">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-orange-100 rounded-lg">
-                <ClipboardList className="w-6 h-6 text-orange-600" />
-              </div>
-              <div>
-                <p className="text-sm text-gray-500">Needs Verification</p>
-                <p className="text-2xl font-bold">0</p>
-              </div>
-            </div>
-          </div>
-          
-          <div className="card p-6">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-purple-100 rounded-lg">
-                <Gift className="w-6 h-6 text-purple-600" />
-              </div>
-              <div>
-                <p className="text-sm text-gray-500">Reward Requests</p>
-                <p className="text-2xl font-bold">0</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Getting started */}
-        <div className="card p-8 text-center">
-          <h2 className="text-2xl font-bold mb-4">🚀 Let's Get Started!</h2>
-          <p className="text-gray-600 mb-6">
-            You're all set up! Here's what to do next:
-          </p>
-          
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-left">
-            <div className="p-6 bg-gray-50 rounded-xl">
-              <div className="text-3xl mb-3">👶</div>
-              <h3 className="font-semibold mb-2">1. Add Children</h3>
-              <p className="text-sm text-gray-600">
-                Create accounts for your kids with their own PINs.
-              </p>
-            </div>
-            
-            <div className="p-6 bg-gray-50 rounded-xl">
-              <div className="text-3xl mb-3">📝</div>
-              <h3 className="font-semibold mb-2">2. Create Chores</h3>
-              <p className="text-sm text-gray-600">
-                Set up recurring or one-time chores with point values.
-              </p>
-            </div>
-            
-            <div className="p-6 bg-gray-50 rounded-xl">
-              <div className="text-3xl mb-3">🎁</div>
-              <h3 className="font-semibold mb-2">3. Add Rewards</h3>
-              <p className="text-sm text-gray-600">
-                Create rewards your kids can earn with their points.
-              </p>
-            </div>
-          </div>
-          
-          <p className="mt-8 text-sm text-gray-500">
-            Full dashboard features coming soon! This is the Phase 1 foundation.
-          </p>
-        </div>
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <Routes>
+          <Route path="/" element={<DashboardHome />} />
+          <Route path="/children" element={<ChildrenPage />} />
+          <Route path="/chores" element={<ChoresPage />} />
+          <Route path="/verify" element={<VerifyChores />} />
+          <Route path="/rewards" element={<div className="card p-8 text-center text-gray-500">Rewards coming soon!</div>} />
+          <Route path="/settings" element={<div className="card p-8 text-center text-gray-500">Settings coming soon!</div>} />
+          <Route path="*" element={<Navigate to="/parent" replace />} />
+        </Routes>
       </main>
     </div>
   );
