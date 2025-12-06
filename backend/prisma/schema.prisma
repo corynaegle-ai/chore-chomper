@@ -1,0 +1,323 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// ENUMS
+// ============================================================================
+
+enum UserRole {
+  PARENT
+  CHILD
+}
+
+enum ChoreStatus {
+  PENDING
+  COMPLETED
+  VERIFIED
+  REJECTED
+}
+
+enum RedemptionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  FULFILLED
+}
+
+enum NotificationType {
+  CHORE_REMINDER
+  CHORE_COMPLETED
+  CHORE_VERIFIED
+  CHORE_REJECTED
+  REDEMPTION_REQUEST
+  REDEMPTION_APPROVED
+  REDEMPTION_REJECTED
+  POINTS_AWARDED
+  KUDOS_RECEIVED
+}
+
+enum NotificationChannel {
+  SMS
+  EMAIL
+  PUSH
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+enum RecurrenceType {
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
+// ============================================================================
+// MODELS
+// ============================================================================
+
+/// Family - The tenant boundary for multi-tenancy
+model Family {
+  id          String   @id @default(uuid())
+  name        String
+  inviteCode  String   @unique @map("invite_code")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  users          User[]
+  categories     Category[]
+  choreTemplates ChoreTemplate[]
+  chores         Chore[]
+  kudos          Kudos[]
+  rewards        Reward[]
+  activityLogs   ActivityLog[]
+
+  @@map("families")
+}
+
+/// User - Both parents and children
+model User {
+  id                      String    @id @default(uuid())
+  familyId                String    @map("family_id")
+  role                    UserRole
+  name                    String
+  email                   String?   @unique
+  passwordHash            String?   @map("password_hash")
+  pinHash                 String?   @map("pin_hash")
+  phoneNumber             String?   @map("phone_number")
+  avatarUrl               String?   @map("avatar_url")
+  avatarPreset            String?   @map("avatar_preset")
+  pointsBalance           Int       @default(0) @map("points_balance")
+  pushSubscription        Json?     @map("push_subscription")
+  notificationPreferences Json      @default("{\"sms\": true, \"email\": true, \"push\": true}") @map("notification_preferences")
+  isActive                Boolean   @default(true) @map("is_active")
+  createdAt               DateTime  @default(now()) @map("created_at")
+  updatedAt               DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  family               Family          @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  assignedChores       Chore[]         @relation("AssignedTo")
+  verifiedChores       Chore[]         @relation("VerifiedBy")
+  createdTemplates     ChoreTemplate[] @relation("CreatedBy")
+  defaultForTemplates  ChoreTemplate[] @relation("DefaultAssignee")
+  redemptions          Redemption[]    @relation("ChildRedemptions")
+  reviewedRedemptions  Redemption[]    @relation("ReviewedBy")
+  kudosReceived        Kudos[]         @relation("KudosReceived")
+  kudosSent            Kudos[]         @relation("KudosSent")
+  notifications        Notification[]
+  activityLogs         ActivityLog[]
+
+  @@index([familyId])
+  @@index([email])
+  @@index([familyId, role])
+  @@map("users")
+}
+
+/// Category - Free-form categories per family
+model Category {
+  id        String   @id @default(uuid())
+  familyId  String   @map("family_id")
+  name      String
+  color     String   @default("#6366f1")
+  icon      String   @default("clipboard")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  family         Family          @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  choreTemplates ChoreTemplate[]
+  chores         Chore[]
+
+  @@unique([familyId, name])
+  @@index([familyId])
+  @@map("categories")
+}
+
+/// ChoreTemplate - Template for recurring or reusable chores
+model ChoreTemplate {
+  id                String          @id @default(uuid())
+  familyId          String          @map("family_id")
+  categoryId        String?         @map("category_id")
+  title             String
+  description       String?
+  points            Int             @default(0)
+  isRecurring       Boolean         @default(false) @map("is_recurring")
+  recurrenceType    RecurrenceType? @map("recurrence_type")
+  recurrenceRule    Json?           @map("recurrence_rule") // { days: ["monday", "wednesday"] } or { dayOfMonth: 15 }
+  defaultAssigneeId String?         @map("default_assignee_id")
+  reminderTime      String?         @map("reminder_time") // HH:mm format
+  isActive          Boolean         @default(true) @map("is_active")
+  createdById       String          @map("created_by_id")
+  createdAt         DateTime        @default(now()) @map("created_at")
+  updatedAt         DateTime        @updatedAt @map("updated_at")
+
+  // Relations
+  family          Family    @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  category        Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  defaultAssignee User?     @relation("DefaultAssignee", fields: [defaultAssigneeId], references: [id], onDelete: SetNull)
+  createdBy       User      @relation("CreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
+  chores          Chore[]
+
+  @@index([familyId])
+  @@index([familyId, isActive])
+  @@map("chore_templates")
+}
+
+/// Chore - Individual chore instances
+model Chore {
+  id                String      @id @default(uuid())
+  templateId        String?     @map("template_id")
+  familyId          String      @map("family_id")
+  assignedToId      String      @map("assigned_to_id")
+  categoryId        String?     @map("category_id")
+  name              String      // Chore name/title
+  description       String?
+  pointValue        Int         @default(0) @map("point_value")
+  status            ChoreStatus @default(PENDING)
+  dueDate           DateTime?   @map("due_date")
+  completedAt       DateTime?   @map("completed_at")
+  photoUrl          String?     @map("photo_url") // Optional photo proof from child
+  completionNotes   String?     @map("completion_notes") // Notes from child when completing
+  verifiedAt        DateTime?   @map("verified_at")
+  verifiedById      String?     @map("verified_by_id")
+  verificationNotes String?     @map("verification_notes") // Feedback from parent (approval or rejection reason)
+  reminderSent      Boolean     @default(false) @map("reminder_sent")
+  createdAt         DateTime    @default(now()) @map("created_at")
+  updatedAt         DateTime    @updatedAt @map("updated_at")
+
+  // Relations
+  family     Family         @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  template   ChoreTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  assignedTo User           @relation("AssignedTo", fields: [assignedToId], references: [id], onDelete: Cascade)
+  category   Category?      @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  verifiedBy User?          @relation("VerifiedBy", fields: [verifiedById], references: [id], onDelete: SetNull)
+
+  @@index([familyId])
+  @@index([familyId, status])
+  @@index([assignedToId, status])
+  @@index([familyId, dueDate])
+  @@map("chores")
+}
+
+/// Kudos - "Good Job" badges sent by parents to children for positive behavior
+model Kudos {
+  id          String   @id @default(uuid())
+  familyId    String   @map("family_id")
+  childId     String   @map("child_id")
+  sentById    String   @map("sent_by_id")
+  message     String   // The note explaining what they did well
+  pointsAwarded Int    @default(0) @map("points_awarded") // Optional bonus points
+  badge       String   @default("star") // Badge type: star, heart, trophy, thumbsup, sparkle, rocket
+  isRead      Boolean  @default(false) @map("is_read") // Has the child seen it?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  // Relations
+  family Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  child  User   @relation("KudosReceived", fields: [childId], references: [id], onDelete: Cascade)
+  sentBy User   @relation("KudosSent", fields: [sentById], references: [id], onDelete: Cascade)
+
+  @@index([familyId])
+  @@index([childId])
+  @@index([childId, isRead])
+  @@map("kudos")
+}
+
+/// Reward - Rewards that can be redeemed with points
+model Reward {
+  id                String   @id @default(uuid())
+  familyId          String   @map("family_id")
+  name              String
+  description       String?
+  pointCost         Int      @map("point_cost")
+  imageUrl          String?  @map("image_url")
+  quantityAvailable Int?     @map("quantity_available") // null = unlimited
+  isActive          Boolean  @default(true) @map("is_active")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  family      Family       @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  redemptions Redemption[]
+
+  @@index([familyId])
+  @@index([familyId, isActive])
+  @@map("rewards")
+}
+
+/// Redemption - Redemption requests from children
+model Redemption {
+  id           String           @id @default(uuid())
+  childId      String           @map("child_id")
+  rewardId     String           @map("reward_id")
+  pointsSpent  Int              @map("points_spent")
+  status       RedemptionStatus @default(PENDING)
+  requestedAt  DateTime         @default(now()) @map("requested_at")
+  reviewedAt   DateTime?        @map("reviewed_at")
+  reviewedById String?          @map("reviewed_by_id")
+  fulfilledAt  DateTime?        @map("fulfilled_at")
+  notes        String?
+  createdAt    DateTime         @default(now()) @map("created_at")
+
+  // Relations
+  child      User   @relation("ChildRedemptions", fields: [childId], references: [id], onDelete: Cascade)
+  reward     Reward @relation(fields: [rewardId], references: [id], onDelete: Cascade)
+  reviewedBy User?  @relation("ReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@index([childId])
+  @@index([childId, status])
+  @@map("redemptions")
+}
+
+/// Notification - Notification log
+model Notification {
+  id                String             @id @default(uuid())
+  userId            String             @map("user_id")
+  type              NotificationType
+  channel           NotificationChannel
+  title             String
+  body              String
+  status            NotificationStatus @default(PENDING)
+  sentAt            DateTime?          @map("sent_at")
+  errorMessage      String?            @map("error_message")
+  relatedEntityType String?            @map("related_entity_type")
+  relatedEntityId   String?            @map("related_entity_id")
+  createdAt         DateTime           @default(now()) @map("created_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, status])
+  @@map("notifications")
+}
+
+/// ActivityLog - Audit trail
+model ActivityLog {
+  id         String   @id @default(uuid())
+  familyId   String   @map("family_id")
+  userId     String   @map("user_id")
+  action     String
+  entityType String   @map("entity_type")
+  entityId   String   @map("entity_id")
+  metadata   Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  // Relations
+  family Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([familyId])
+  @@index([familyId, createdAt])
+  @@map("activity_logs")
+}
