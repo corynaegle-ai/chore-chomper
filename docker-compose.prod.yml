@@ -1,71 +1,65 @@
-version: '3.8'
-
 services:
-  # Nginx Reverse Proxy
   nginx:
     image: nginx:alpine
-    container_name: chorechomper-nginx
     ports:
       - "80:80"
       - "443:443"
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx/ssl:/etc/nginx/ssl:ro
-      - ./frontend/dist:/usr/share/nginx/html:ro
+      - ./nginx:/etc/nginx/conf.d
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+    depends_on:
+      - frontend
+      - backend
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    expose:
+      - "3000"
     depends_on:
       - backend
-    restart: always
+    restart: unless-stopped
 
-  # PostgreSQL Database
-  postgres:
-    image: postgres:16-alpine
-    container_name: chorechomper-db
-    environment:
-      POSTGRES_USER: ${DB_USER:-chorechomper}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-      POSTGRES_DB: ${DB_NAME:-chorechomper}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-chorechomper}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    restart: always
-
-  # Redis for job queues
-  redis:
-    image: redis:7-alpine
-    container_name: chorechomper-redis
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    restart: always
-
-  # Backend API
   backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile.prod
-    container_name: chorechomper-api
+    build: ./backend
+    expose:
+      - "3001"
     environment:
-      NODE_ENV: production
-      PORT: 3001
-      DATABASE_URL: postgresql://${DB_USER:-chorechomper}:${DB_PASSWORD}@postgres:5432/${DB_NAME:-chorechomper}?schema=public
-      REDIS_URL: redis://redis:6379
-    env_file:
-      - .env
+      - DATABASE_URL=postgresql://chorechomper:chomper2024@db:5432/chorechomper
+      - JWT_SECRET=${JWT_SECRET:-supersecretjwtkey2024}
+      - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET:-refreshsecret2024}
+      - REDIS_URL=redis://redis:6379
+      - NODE_ENV=production
     depends_on:
-      postgres:
+      db:
         condition: service_healthy
       redis:
         condition: service_healthy
-    restart: always
+    restart: unless-stopped
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=chorechomper
+      - POSTGRES_PASSWORD=chomper2024
+      - POSTGRES_DB=chorechomper
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U chorechomper"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
 
 volumes:
   postgres_data:
-  redis_data:
