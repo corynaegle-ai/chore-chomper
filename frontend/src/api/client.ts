@@ -290,3 +290,40 @@ export const redemptionApi = {
   fulfill: (id: string) =>
     api.put<ApiResponse<Redemption>>(`/redemptions/${id}/fulfill`),
 };
+
+// Upload Types
+export interface UploadResponse {
+  url: string;
+  filename: string;
+  originalName: string;
+  size: number;
+  mimeType: string;
+}
+
+// Upload API
+export const uploadApi = {
+  uploadPhoto: async (file: File): Promise<UploadResponse> => {
+    const formData = new FormData();
+    formData.append('photo', file);
+    
+    const token = localStorage.getItem('accessToken');
+    const response = await fetch('/api/upload/photo', {
+      method: 'POST',
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: formData,
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok || !data.success) {
+      throw new Error(data.error?.message || 'Upload failed');
+    }
+    
+    return data.data;
+  },
+  
+  deletePhoto: (filename: string) =>
+    api.delete<ApiResponse>(`/upload/photo/${filename}`),
+};

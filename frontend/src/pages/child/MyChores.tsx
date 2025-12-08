@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import { choreApi, Chore } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
+import PhotoUpload from '../../components/PhotoUpload';
 import { 
   Star, Clock, CheckCircle, XCircle, Sparkles, 
-  AlertCircle, Camera, Send, ChevronDown, ChevronUp
+  AlertCircle, Camera, Send, ChevronDown, ChevronUp,
+  Image
 } from 'lucide-react';
 
 type ChoreFilter = 'all' | 'PENDING' | 'COMPLETED' | 'REJECTED' | 'VERIFIED';
@@ -16,6 +18,8 @@ export default function MyChores() {
   const [expandedChore, setExpandedChore] = useState<string | null>(null);
   const [completing, setCompleting] = useState<string | null>(null);
   const [completionNotes, setCompletionNotes] = useState<Record<string, string>>({});
+  const [uploadedPhotos, setUploadedPhotos] = useState<Record<string, string>>({});
+  const [showPhotoUpload, setShowPhotoUpload] = useState<string | null>(null);
 
   useEffect(() => {
     loadChores();
@@ -38,11 +42,18 @@ export default function MyChores() {
     setCompleting(choreId);
     try {
       const notes = completionNotes[choreId];
-      await choreApi.complete(choreId, { notes });
+      const photoUrl = uploadedPhotos[choreId];
+      await choreApi.complete(choreId, { notes, photoUrl });
       await loadChores();
       await refreshUser();
       setExpandedChore(null);
+      setShowPhotoUpload(null);
       setCompletionNotes((prev) => {
+        const next = { ...prev };
+        delete next[choreId];
+        return next;
+      });
+      setUploadedPhotos((prev) => {
         const next = { ...prev };
         delete next[choreId];
         return next;
@@ -53,6 +64,18 @@ export default function MyChores() {
     } finally {
       setCompleting(null);
     }
+  };
+
+  const handlePhotoUploaded = (choreId: string, url: string) => {
+    setUploadedPhotos((prev) => ({ ...prev, [choreId]: url }));
+  };
+
+  const handlePhotoRemoved = (choreId: string) => {
+    setUploadedPhotos((prev) => {
+      const next = { ...prev };
+      delete next[choreId];
+      return next;
+    });
   };
 
   const getStatusIcon = (status: string) => {
@@ -184,6 +207,10 @@ export default function MyChores() {
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
+                  {/* Show photo indicator if chore has photo */}
+                  {chore.photoUrl && (
+                    <Image className="w-4 h-4 text-green-500" />
+                  )}
                   <div className="flex items-center gap-1 text-chomper-600">
                     <Star className="w-4 h-4" />
                     <span className="font-bold">{chore.pointValue}</span>
@@ -221,6 +248,20 @@ export default function MyChores() {
                       </p>
                     )}
 
+                    {/* Show existing photo if present */}
+                    {chore.photoUrl && chore.status !== 'PENDING' && (
+                      <div className="rounded-lg overflow-hidden border border-gray-200">
+                        <img 
+                          src={chore.photoUrl} 
+                          alt="Chore completion" 
+                          className="w-full h-48 object-cover"
+                        />
+                        <p className="text-xs text-gray-500 p-2 bg-gray-100">
+                          📷 Photo submitted
+                        </p>
+                      </div>
+                    )}
+
                     {/* Rejection feedback */}
                     {chore.status === 'REJECTED' && chore.verificationNotes && (
                       <div className="bg-red-100 border border-red-200 rounded-lg p-3">
@@ -237,6 +278,68 @@ export default function MyChores() {
                     {/* Complete button for PENDING or REJECTED chores */}
                     {(chore.status === 'PENDING' || chore.status === 'REJECTED') && (
                       <div className="space-y-3 pt-2">
+                        {/* Photo Upload Section */}
+                        {showPhotoUpload === chore.id ? (
+                          <div className="bg-white border border-gray-200 rounded-lg p-3">
+                            <div className="flex items-center justify-between mb-3">
+                              <p className="text-sm font-medium text-gray-700">Add Photo (Optional)</p>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setShowPhotoUpload(null);
+                                  handlePhotoRemoved(chore.id);
+                                }}
+                                className="text-sm text-gray-500 hover:text-gray-700"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                            <PhotoUpload
+                              currentPhotoUrl={uploadedPhotos[chore.id] || null}
+                              onPhotoUploaded={(url) => handlePhotoUploaded(chore.id, url)}
+                              onPhotoRemoved={() => handlePhotoRemoved(chore.id)}
+                              disabled={completing === chore.id}
+                            />
+                          </div>
+                        ) : (
+                          <>
+                            {/* Show uploaded photo preview */}
+                            {uploadedPhotos[chore.id] && (
+                              <div className="relative rounded-lg overflow-hidden border border-green-200">
+                                <img 
+                                  src={uploadedPhotos[chore.id]} 
+                                  alt="Photo preview" 
+                                  className="w-full h-32 object-cover"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => handlePhotoRemoved(chore.id)}
+                                  className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600"
+                                >
+                                  <XCircle className="w-4 h-4" />
+                                </button>
+                                <p className="text-xs text-green-700 p-2 bg-green-50">
+                                  ✓ Photo ready to submit
+                                </p>
+                              </div>
+                            )}
+                            
+                            {!uploadedPhotos[chore.id] && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setShowPhotoUpload(chore.id);
+                                }}
+                                className="w-full btn-secondary flex items-center justify-center gap-2"
+                              >
+                                <Camera className="w-4 h-4" />
+                                Add Photo (Optional)
+                              </button>
+                            )}
+                          </>
+                        )}
+
                         <textarea
                           placeholder="Add a note (optional)"
                           value={completionNotes[chore.id] || ''}
@@ -247,36 +350,24 @@ export default function MyChores() {
                           className="w-full px-3 py-2 border rounded-lg text-sm resize-none"
                           rows={2}
                         />
-                        <div className="flex gap-2">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              // Photo upload would go here
-                              alert('Photo upload coming soon!');
-                            }}
-                            className="flex-1 btn-secondary flex items-center justify-center gap-2"
-                          >
-                            <Camera className="w-4 h-4" />
-                            Add Photo
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleComplete(chore.id);
-                            }}
-                            disabled={completing === chore.id}
-                            className="flex-1 btn-primary flex items-center justify-center gap-2"
-                          >
-                            {completing === chore.id ? (
-                              <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
-                            ) : (
-                              <>
-                                <Send className="w-4 h-4" />
-                                {chore.status === 'REJECTED' ? 'Resubmit' : 'Done!'}
-                              </>
-                            )}
-                          </button>
-                        </div>
+                        
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleComplete(chore.id);
+                          }}
+                          disabled={completing === chore.id}
+                          className="w-full btn-primary flex items-center justify-center gap-2"
+                        >
+                          {completing === chore.id ? (
+                            <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
+                          ) : (
+                            <>
+                              <Send className="w-4 h-4" />
+                              {chore.status === 'REJECTED' ? 'Resubmit' : 'Mark as Done!'}
+                            </>
+                          )}
+                        </button>
                       </div>
                     )}
 

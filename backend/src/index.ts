@@ -3,6 +3,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
 import rateLimit from 'express-rate-limit';
+import path from 'path';
 
 import { env, isDev } from './config/env.js';
 import { connectDatabase, disconnectDatabase } from './config/database.js';
@@ -19,6 +20,7 @@ import categoryRoutes from './routes/category.routes.js';
 import rewardRoutes from './routes/reward.routes.js';
 import redemptionRoutes from './routes/redemption.routes.js';
 import notificationRoutes from './routes/notification.routes.js';
+import uploadRoutes from './routes/upload.routes.js';
 
 const app = express();
 
@@ -26,7 +28,9 @@ const app = express();
 app.set('trust proxy', 1);
 
 // Security middleware
-app.use(helmet());
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" }, // Allow images to be served cross-origin
+}));
 app.use(cors({
   origin: isDev ? true : env.FRONTEND_URL,
   credentials: true,
@@ -49,6 +53,13 @@ app.use(express.urlencoded({ extended: true }));
 // Compression
 app.use(compression());
 
+// Serve uploaded files as static content
+const uploadsDir = "/app/uploads";
+app.use('/uploads', express.static(uploadsDir, {
+  maxAge: '1d', // Cache for 1 day
+  etag: true,
+}));
+
 // Health check endpoint
 app.get('/api/health', (req, res) => {
   res.json({
@@ -65,6 +76,7 @@ app.use('/api/family', familyRoutes);
 app.use('/api/chores', choreRoutes);
 app.use('/api/kudos', kudosRoutes);
 app.use('/api/categories', categoryRoutes);
+app.use('/api/upload', uploadRoutes);
 
 // TODO: Add remaining routes
 // app.use('/api/chore-templates', choreTemplateRoutes);
