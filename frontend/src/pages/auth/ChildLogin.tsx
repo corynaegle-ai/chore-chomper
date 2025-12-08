@@ -159,9 +159,9 @@ export default function ChildLogin() {
       return <img src={child.avatarUrl} alt={child.name} className=w-16 h-16 rounded-full object-cover />;
     }
     if (child.avatarPreset && AVATAR_PRESETS[child.avatarPreset]) {
-      return <span className=text-5xl>{AVATAR_PRESETS[child.avatarPreset]}</span>;
+      return <span className="text-5xl">{AVATAR_PRESETS[child.avatarPreset]}</span>;
     }
-    return <span className=text-5xl>👤</span>;
+    return <span className="text-5xl">👤</span>;
   };
 
   // Show loading while checking for saved code
