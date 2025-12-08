@@ -1,6 +1,6 @@
 import Mascot from '../../components/Mascot';
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../api/client';
@@ -25,8 +25,11 @@ const AVATAR_PRESETS: Record<string, string> = {
   robot: '🤖',
 };
 
+const STORAGE_KEY = 'chorechomper_family_code';
+
 export default function ChildLogin() {
   const { childLogin } = useAuth();
+  const [searchParams] = useSearchParams();
   const [familyCode, setFamilyCode] = useState('');
   const [pin, setPin] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -34,6 +37,42 @@ export default function ChildLogin() {
   const [familyName, setFamilyName] = useState('');
   const [children, setChildren] = useState<Child[]>([]);
   const [selectedChild, setSelectedChild] = useState<Child | null>(null);
+  const [initializing, setInitializing] = useState(true);
+
+  // On mount, check URL param or localStorage for saved family code
+  useEffect(() => {
+    const init = async () => {
+      // Priority: URL param > localStorage
+      const urlCode = searchParams.get('family')?.toUpperCase().slice(0, 6);
+      const savedCode = localStorage.getItem(STORAGE_KEY);
+      const codeToUse = urlCode || savedCode;
+
+      if (codeToUse && codeToUse.length === 6) {
+        setFamilyCode(codeToUse);
+        // Try to fetch children automatically
+        try {
+          const response = await api.get(`/auth/family-children/${codeToUse}`);
+          const { familyName: name, children: kids } = response.data.data;
+          
+          if (kids.length > 0) {
+            setFamilyName(name);
+            setChildren(kids);
+            setStep('select');
+            // Save to localStorage if it came from URL
+            if (urlCode) {
+              localStorage.setItem(STORAGE_KEY, urlCode);
+            }
+          }
+        } catch (error) {
+          // Invalid saved code, clear it
+          localStorage.removeItem(STORAGE_KEY);
+        }
+      }
+      setInitializing(false);
+    };
+
+    init();
+  }, [searchParams]);
 
   const handleCodeSubmit = async () => {
     if (familyCode.length !== 6) return;
@@ -51,6 +90,8 @@ export default function ChildLogin() {
       setFamilyName(name);
       setChildren(kids);
       setStep('select');
+      // Save family code for next time
+      localStorage.setItem(STORAGE_KEY, familyCode);
     } catch (error: any) {
       toast.error('Family not found. Check your code!');
     } finally {
@@ -103,6 +144,16 @@ export default function ChildLogin() {
     }
   };
 
+  const handleDifferentFamily = () => {
+    localStorage.removeItem(STORAGE_KEY);
+    setFamilyCode('');
+    setFamilyName('');
+    setChildren([]);
+    setSelectedChild(null);
+    setPin('');
+    setStep('code');
+  };
+
   const getAvatar = (child: Child) => {
     if (child.avatarUrl) {
       return <img src={child.avatarUrl} alt={child.name} className=w-16 h-16 rounded-full object-cover />;
@@ -112,6 +163,18 @@ export default function ChildLogin() {
     }
     return <span className=text-5xl>👤</span>;
   };
+
+  // Show loading while checking for saved code
+  if (initializing) {
+    return (
+      <div className=min-h-screen flex items-center justify-center bg-gradient-to-br from-green-100 via-blue-100 to-purple-100>
+        <div className=text-center>
+          <Mascot size=xl animate />
+          <p className=mt-4 text-gray-600>Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className=min-h-screen flex flex-col justify-center py-12 px-4 bg-gradient-to-br from-green-100 via-blue-100 to-purple-100>
@@ -156,12 +219,20 @@ export default function ChildLogin() {
 
           {step === 'select' && (
             <>
-              <button
-                onClick={handleBack}
-                className=text-gray-500 hover:text-gray-700 mb-4
-              >
-                ← Back
-              </button>
+              <div className=flex justify-between items-center mb-4>
+                <button
+                  onClick={handleBack}
+                  className=text-gray-500 hover:text-gray-700
+                >
+                  ← Back
+                </button>
+                <button
+                  onClick={handleDifferentFamily}
+                  className=text-sm text-chomper-600 hover:text-chomper-700
+                >
+                  Different family?
+                </button>
+              </div>
               
               <h2 className=text-xl font-semibold text-center mb-2>
                 Who are you?
