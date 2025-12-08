@@ -3,18 +3,64 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../context/AuthContext';
+import api from '../../api/client';
+
+interface Child {
+  id: string;
+  name: string;
+  avatarUrl: string | null;
+  avatarPreset: string | null;
+}
+
+const AVATAR_PRESETS: Record<string, string> = {
+  cat: '🐱',
+  dog: '🐕',
+  bunny: '🐰',
+  bear: '🐻',
+  panda: '🐼',
+  lion: '🦁',
+  tiger: '🐯',
+  unicorn: '🦄',
+  dragon: '🐲',
+  robot: '🤖',
+};
 
 export default function ChildLogin() {
   const { childLogin } = useAuth();
   const [familyCode, setFamilyCode] = useState('');
   const [pin, setPin] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [step, setStep] = useState<'code' | 'pin'>('code');
+  const [step, setStep] = useState<'code' | 'select' | 'pin'>('code');
+  const [familyName, setFamilyName] = useState('');
+  const [children, setChildren] = useState<Child[]>([]);
+  const [selectedChild, setSelectedChild] = useState<Child | null>(null);
 
-  const handleCodeSubmit = () => {
-    if (familyCode.length === 6) {
-      setStep('pin');
+  const handleCodeSubmit = async () => {
+    if (familyCode.length !== 6) return;
+    
+    setIsLoading(true);
+    try {
+      const response = await api.get(`/auth/family-children/${familyCode}`);
+      const { familyName: name, children: kids } = response.data.data;
+      
+      if (kids.length === 0) {
+        toast.error('No kids found in this family yet!');
+        return;
+      }
+      
+      setFamilyName(name);
+      setChildren(kids);
+      setStep('select');
+    } catch (error: any) {
+      toast.error('Family not found. Check your code!');
+    } finally {
+      setIsLoading(false);
     }
+  };
+
+  const handleChildSelect = (child: Child) => {
+    setSelectedChild(child);
+    setStep('pin');
   };
 
   const handlePinPress = (digit: string) => {
@@ -22,7 +68,6 @@ export default function ChildLogin() {
       const newPin = pin + digit;
       setPin(newPin);
       
-      // Auto-submit when PIN is complete
       if (newPin.length === 4) {
         handleLogin(newPin);
       }
@@ -37,9 +82,9 @@ export default function ChildLogin() {
     setIsLoading(true);
     try {
       await childLogin(familyCode, finalPin);
-      toast.success('Welcome back! 🎉');
+      toast.success(`Welcome back, ${selectedChild?.name}! 🎉`);
     } catch (error: any) {
-      toast.error('Oops! Wrong code or PIN. Try again!');
+      toast.error('Wrong PIN! Try again.');
       setPin('');
     } finally {
       setIsLoading(false);
@@ -47,64 +92,124 @@ export default function ChildLogin() {
   };
 
   const handleBack = () => {
-    setStep('code');
-    setPin('');
+    if (step === 'pin') {
+      setStep('select');
+      setPin('');
+      setSelectedChild(null);
+    } else if (step === 'select') {
+      setStep('code');
+      setChildren([]);
+      setFamilyName('');
+    }
+  };
+
+  const getAvatar = (child: Child) => {
+    if (child.avatarUrl) {
+      return <img src={child.avatarUrl} alt={child.name} className=w-16 h-16 rounded-full object-cover />;
+    }
+    if (child.avatarPreset && AVATAR_PRESETS[child.avatarPreset]) {
+      return <span className=text-5xl>{AVATAR_PRESETS[child.avatarPreset]}</span>;
+    }
+    return <span className=text-5xl>👤</span>;
   };
 
   return (
-    <div className="min-h-screen flex flex-col justify-center py-12 px-4 bg-gradient-to-br from-green-100 via-blue-100 to-purple-100">
-      <div className="mx-auto w-full max-w-sm">
-        <div className="text-center mb-8">
-          <Mascot size="xl" animate />
-          <h1 className="mt-4 text-4xl font-display font-bold text-chomper-600">
+    <div className=min-h-screen flex flex-col justify-center py-12 px-4 bg-gradient-to-br from-green-100 via-blue-100 to-purple-100>
+      <div className=mx-auto w-full max-w-sm>
+        <div className=text-center mb-8>
+          <Mascot size=xl animate />
+          <h1 className=mt-4 text-4xl font-display font-bold text-chomper-600>
             Hi there!
           </h1>
         </div>
 
-        <div className="bg-white py-8 px-6 shadow-xl rounded-2xl">
-          {step === 'code' ? (
+        <div className=bg-white py-8 px-6 shadow-xl rounded-2xl>
+          {step === 'code' && (
             <>
-              <h2 className="text-xl font-semibold text-center mb-6">
+              <h2 className=text-xl font-semibold text-center mb-6>
                 Enter your Family Code
               </h2>
               
               <input
-                type="text"
+                type=text
                 value={familyCode}
                 onChange={(e) => setFamilyCode(e.target.value.toUpperCase().slice(0, 6))}
-                className="w-full text-center text-3xl font-mono tracking-widest input py-4 uppercase"
-                placeholder="ABC123"
+                className=w-full text-center text-3xl font-mono tracking-widest input py-4 uppercase
+                placeholder=ABC123
                 maxLength={6}
                 autoFocus
               />
               
-              <p className="mt-2 text-sm text-gray-500 text-center">
+              <p className=mt-2 text-sm text-gray-500 text-center>
                 Ask a parent for your family code!
               </p>
               
               <button
                 onClick={handleCodeSubmit}
-                disabled={familyCode.length !== 6}
-                className="w-full mt-6 btn-primary btn-lg text-xl"
+                disabled={familyCode.length !== 6 || isLoading}
+                className=w-full mt-6 btn-primary btn-lg text-xl disabled:opacity-50
               >
-                Next →
+                {isLoading ? 'Looking...' : 'Next →'}
               </button>
             </>
-          ) : (
+          )}
+
+          {step === 'select' && (
             <>
               <button
                 onClick={handleBack}
-                className="text-gray-500 hover:text-gray-700 mb-4"
+                className=text-gray-500 hover:text-gray-700 mb-4
               >
                 ← Back
               </button>
               
-              <h2 className="text-xl font-semibold text-center mb-4">
-                Enter your PIN
+              <h2 className=text-xl font-semibold text-center mb-2>
+                Who are you?
               </h2>
+              <p className=text-sm text-gray-500 text-center mb-6>
+                {familyName} Family
+              </p>
+              
+              <div className=space-y-3>
+                {children.map((child) => (
+                  <button
+                    key={child.id}
+                    onClick={() => handleChildSelect(child)}
+                    className=w-full flex items-center gap-4 p-4 rounded-xl border-2 border-gray-200 hover:border-chomper-400 hover:bg-chomper-50 transition-all
+                  >
+                    <div className=flex-shrink-0 w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center overflow-hidden>
+                      {getAvatar(child)}
+                    </div>
+                    <span className=text-xl font-semibold text-gray-800>
+                      {child.name}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+
+          {step === 'pin' && (
+            <>
+              <button
+                onClick={handleBack}
+                className=text-gray-500 hover:text-gray-700 mb-4
+              >
+                ← Back
+              </button>
+              
+              <div className=text-center mb-6>
+                <div className=inline-flex items-center justify-center w-20 h-20 rounded-full bg-chomper-100 mb-3>
+                  {selectedChild && getAvatar(selectedChild)}
+                </div>
+                <h2 className=text-xl font-semibold>
+                  Hi, {selectedChild?.name}!
+                </h2>
+                <p className=text-gray-500>Enter your PIN</p>
+              </div>
               
               {/* PIN display */}
-              <div className="flex justify-center gap-3 mb-8">
+              <div className=flex justify-center gap-3 mb-8>
                 {[0, 1, 2, 3].map((i) => (
                   <div
                     key={i}
@@ -120,13 +225,13 @@ export default function ChildLogin() {
               </div>
               
               {/* Number pad */}
-              <div className="grid grid-cols-3 gap-3">
+              <div className=grid grid-cols-3 gap-3>
                 {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
                   <button
                     key={num}
                     onClick={() => handlePinPress(num.toString())}
                     disabled={isLoading}
-                    className="h-16 text-2xl font-semibold rounded-xl bg-gray-100 hover:bg-gray-200 active:bg-gray-300 transition-colors touch-target"
+                    className=h-16 text-2xl font-semibold rounded-xl bg-gray-100 hover:bg-gray-200 active:bg-gray-300 transition-colors
                   >
                     {num}
                   </button>
@@ -135,32 +240,32 @@ export default function ChildLogin() {
                 <button
                   onClick={() => handlePinPress('0')}
                   disabled={isLoading}
-                  className="h-16 text-2xl font-semibold rounded-xl bg-gray-100 hover:bg-gray-200 active:bg-gray-300 transition-colors touch-target"
+                  className=h-16 text-2xl font-semibold rounded-xl bg-gray-100 hover:bg-gray-200 active:bg-gray-300 transition-colors
                 >
                   0
                 </button>
                 <button
                   onClick={handlePinDelete}
                   disabled={isLoading || pin.length === 0}
-                  className="h-16 text-xl rounded-xl bg-red-100 hover:bg-red-200 active:bg-red-300 transition-colors touch-target disabled:opacity-50"
+                  className=h-16 text-xl rounded-xl bg-red-100 hover:bg-red-200 active:bg-red-300 transition-colors disabled:opacity-50
                 >
                   ⌫
                 </button>
               </div>
               
               {isLoading && (
-                <div className="mt-6 text-center">
-                  <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-chomper-500 border-t-transparent"></div>
+                <div className=mt-6 text-center>
+                  <div className=inline-block animate-spin rounded-full h-8 w-8 border-4 border-chomper-500 border-t-transparent></div>
                 </div>
               )}
             </>
           )}
         </div>
 
-        <div className="mt-6 text-center">
+        <div className=mt-6 text-center>
           <Link
-            to="/login"
-            className="text-gray-600 hover:text-gray-800"
+            to=/login
+            className=text-gray-600 hover:text-gray-800
           >
             👨‍👩‍👧‍👦 Parent? Login here
           </Link>

@@ -160,4 +160,49 @@ router.post('/logout', authenticate, (req: Request, res: Response) => {
   res.json(successResponse({ message: 'Logged out successfully' }));
 });
 
+
+/**
+ * GET /api/auth/family-children/:code
+ * Get list of children in a family by invite code (for child login selection)
+ * Public endpoint - no auth required
+ */
+router.get('/family-children/:code', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { code } = req.params;
+    
+    if (!code || code.length !== 6) {
+      res.status(400).json(errorResponse('INVALID_CODE', 'Family code must be 6 characters'));
+      return;
+    }
+
+    const family = await prisma.family.findUnique({
+      where: { inviteCode: code.toUpperCase() },
+      include: {
+        users: {
+          where: { role: 'CHILD', isActive: true },
+          select: {
+            id: true,
+            name: true,
+            avatarUrl: true,
+            avatarPreset: true,
+          },
+          orderBy: { name: 'asc' },
+        },
+      },
+    });
+
+    if (!family) {
+      res.status(404).json(errorResponse('FAMILY_NOT_FOUND', 'Family not found'));
+      return;
+    }
+
+    res.json(successResponse({
+      familyName: family.name,
+      children: family.users,
+    }));
+  } catch (error) {
+    next(error);
+  }
+});
+
 export default router;
