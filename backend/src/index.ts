@@ -15,6 +15,9 @@ import userRoutes from './routes/user.routes.js';
 import familyRoutes from './routes/family.routes.js';
 import choreRoutes from './routes/chore.routes.js';
 import kudosRoutes from './routes/kudos.routes.js';
+import categoryRoutes from './routes/category.routes.js';
+import rewardRoutes from './routes/reward.routes.js';
+import redemptionRoutes from './routes/redemption.routes.js';
 
 const app = express();
 
@@ -60,12 +63,12 @@ app.use('/api/users', userRoutes);
 app.use('/api/family', familyRoutes);
 app.use('/api/chores', choreRoutes);
 app.use('/api/kudos', kudosRoutes);
+app.use('/api/categories', categoryRoutes);
 
 // TODO: Add remaining routes
-// app.use('/api/categories', categoryRoutes);
 // app.use('/api/chore-templates', choreTemplateRoutes);
-// app.use('/api/rewards', rewardRoutes);
-// app.use('/api/redemptions', redemptionRoutes);
+app.use('/api/rewards', rewardRoutes);
+app.use('/api/redemptions', redemptionRoutes);
 // app.use('/api/notifications', notificationRoutes);
 
 // Error handling

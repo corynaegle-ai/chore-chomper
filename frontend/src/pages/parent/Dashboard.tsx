@@ -3,7 +3,7 @@ import { Routes, Route, NavLink, Navigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { 
   LogOut, Home, Users, ClipboardList, Gift, Settings, Menu, X, 
-  RefreshCw, Copy, Check
+  RefreshCw, Copy, Check, Tag
 } from 'lucide-react';
 
 // Sub-pages
@@ -11,6 +11,8 @@ import DashboardHome from './DashboardHome';
 import ChildrenPage from './ChildrenPage';
 import ChoresPage from './ChoresPage';
 import VerifyChores from './VerifyChores';
+import CategoriesPage from './CategoriesPage';
+import RewardsPage from './RewardsPage';
 
 export default function ParentDashboard() {
   const { user, logout } = useAuth();
@@ -30,6 +32,7 @@ export default function ParentDashboard() {
     { to: '/parent/children', icon: Users, label: 'Children' },
     { to: '/parent/chores', icon: ClipboardList, label: 'Chores' },
     { to: '/parent/verify', icon: RefreshCw, label: 'Verify' },
+    { to: '/parent/categories', icon: Tag, label: 'Categories' },
     { to: '/parent/rewards', icon: Gift, label: 'Rewards' },
     { to: '/parent/settings', icon: Settings, label: 'Settings' },
   ];
@@ -112,7 +115,8 @@ export default function ParentDashboard() {
           <Route path="/children" element={<ChildrenPage />} />
           <Route path="/chores" element={<ChoresPage />} />
           <Route path="/verify" element={<VerifyChores />} />
-          <Route path="/rewards" element={<div className="card p-8 text-center text-gray-500">Rewards coming soon!</div>} />
+          <Route path="/categories" element={<CategoriesPage />} />
+          <Route path="/rewards" element={<RewardsPage />} />
           <Route path="/settings" element={<div className="card p-8 text-center text-gray-500">Settings coming soon!</div>} />
           <Route path="*" element={<Navigate to="/parent" replace />} />
         </Routes>

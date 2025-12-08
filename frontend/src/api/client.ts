@@ -76,10 +76,17 @@ export interface Family {
 
 export interface Category {
   id: string;
+  familyId: string;
   name: string;
   color: string;
-  icon?: string;
+  icon: string;
+  createdAt: string;
+  _count?: {
+    chores: number;
+    choreTemplates: number;
+  };
 }
+
 
 export interface Chore {
   id: string;
@@ -186,4 +193,56 @@ export const choreApi = {
   reset: (id: string) => api.post<ApiResponse<Chore>>(`/chores/${id}/reset`),
   delete: (id: string) => api.delete<ApiResponse>(`/chores/${id}`),
   bulkDelete: (ids: string[]) => api.delete<ApiResponse>("/chores/bulk", { data: { ids } }),
+};
+
+// Category API
+export const categoryApi = {
+  getAll: () => api.get<ApiResponse<Category[]>>("/categories"),
+  getById: (id: string) => api.get<ApiResponse<Category>>(`/categories/${id}`),
+  create: (data: { name: string; color?: string; icon?: string }) =>
+    api.post<ApiResponse<Category>>("/categories", data),
+  update: (id: string, data: { name?: string; color?: string; icon?: string }) =>
+    api.put<ApiResponse<Category>>(`/categories/${id}`, data),
+  delete: (id: string) => api.delete<ApiResponse>(`/categories/${id}`),
+};
+
+// Reward Types
+export interface Reward {
+  id: string;
+  familyId: string;
+  name: string;
+  description?: string;
+  pointCost: number;
+  imageUrl?: string;
+  quantityAvailable?: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  _count?: {
+    redemptions: number;
+  };
+}
+
+// Reward API
+export const rewardApi = {
+  getAll: (includeInactive?: boolean) =>
+    api.get<ApiResponse<Reward[]>>("/rewards", { params: includeInactive ? { includeInactive: "true" } : undefined }),
+  getById: (id: string) => api.get<ApiResponse<Reward>>(`/rewards/${id}`),
+  create: (data: {
+    name: string;
+    description?: string;
+    pointCost: number;
+    imageUrl?: string;
+    quantityAvailable?: number;
+    isActive?: boolean;
+  }) => api.post<ApiResponse<Reward>>("/rewards", data),
+  update: (id: string, data: {
+    name?: string;
+    description?: string;
+    pointCost?: number;
+    imageUrl?: string;
+    quantityAvailable?: number;
+    isActive?: boolean;
+  }) => api.put<ApiResponse<Reward>>(`/rewards/${id}`, data),
+  delete: (id: string) => api.delete<ApiResponse>(`/rewards/${id}`),
 };
