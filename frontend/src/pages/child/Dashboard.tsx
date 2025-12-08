@@ -1,3 +1,4 @@
+import Mascot from '../../components/Mascot';
 import { Routes, Route, NavLink, Navigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { Trophy, Gift, Star, LogOut, Home } from 'lucide-react';
@@ -23,7 +24,7 @@ export default function ChildDashboard() {
         <div className="max-w-lg mx-auto px-4">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center gap-3">
-              <span className="text-3xl">🦷</span>
+              <Mascot size="md" />
               <span className="font-display font-bold text-chomper-600">
                 ChoreChomper
               </span>

@@ -1,3 +1,4 @@
+import Mascot from '../../components/Mascot';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
@@ -41,7 +42,7 @@ export default function Login() {
     <div className="min-h-screen flex flex-col justify-center py-12 sm:px-6 lg:px-8 bg-gradient-to-br from-chomper-50 to-purple-100">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <div className="text-center">
-          <span className="text-6xl">🦷</span>
+          <Mascot size="xl" />
           <h1 className="mt-4 text-4xl font-display font-bold text-chomper-600">
             ChoreChomper
           </h1>

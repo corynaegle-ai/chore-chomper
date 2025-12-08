@@ -1,3 +1,4 @@
+import Mascot from '../../components/Mascot';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
@@ -54,7 +55,7 @@ export default function ChildLogin() {
     <div className="min-h-screen flex flex-col justify-center py-12 px-4 bg-gradient-to-br from-green-100 via-blue-100 to-purple-100">
       <div className="mx-auto w-full max-w-sm">
         <div className="text-center mb-8">
-          <span className="text-7xl animate-bounce-slow">🦷</span>
+          <Mascot size="xl" animate />
           <h1 className="mt-4 text-4xl font-display font-bold text-chomper-600">
             Hi there!
           </h1>
