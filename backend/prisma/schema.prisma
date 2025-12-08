@@ -46,6 +46,7 @@ enum NotificationType {
 }
 
 enum NotificationChannel {
+  IN_APP
   SMS
   EMAIL
   PUSH
@@ -290,6 +291,7 @@ model Notification {
   status            NotificationStatus @default(PENDING)
   sentAt            DateTime?          @map("sent_at")
   errorMessage      String?            @map("error_message")
+  readAt            DateTime?          @map("read_at")
   relatedEntityType String?            @map("related_entity_type")
   relatedEntityId   String?            @map("related_entity_id")
   createdAt         DateTime           @default(now()) @map("created_at")

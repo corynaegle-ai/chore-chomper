@@ -2,7 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { z } from 'zod';
 import { authenticate } from '../middleware/auth.js';
-import { notificationService, NotificationPreferences } from '../services/notification.service.js';
+import { notificationService } from '../services/notification.service.js';
 import { logger } from '../utils/logger.js';
 
 const router = Router();
@@ -33,6 +33,7 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
         body: true,
         status: true,
         sentAt: true,
+        readAt: true,
         relatedEntityType: true,
         relatedEntityId: true,
         createdAt: true,
@@ -40,11 +41,13 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
     });
 
     const total = await prisma.notification.count({ where: { userId } });
+    const unreadCount = await notificationService.getUnreadCount(userId);
 
     res.json({
       success: true,
       data: {
         notifications,
+        unreadCount,
         pagination: {
           total,
           limit,
@@ -59,7 +62,7 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
 });
 
 // =============================================================================
-// GET /api/notifications/unread-count - Get count of recent notifications
+// GET /api/notifications/unread-count - Get count of unread notifications
 // =============================================================================
 router.get('/unread-count', async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -76,55 +79,18 @@ router.get('/unread-count', async (req: Request, res: Response, next: NextFuncti
 });
 
 // =============================================================================
-// GET /api/notifications/preferences - Get notification preferences
+// PUT /api/notifications/read-all - Mark all notifications as read
 // =============================================================================
-router.get('/preferences', async (req: Request, res: Response, next: NextFunction) => {
+router.put('/read-all', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = req.user!.userId;
-    const preferences = await notificationService.getPreferences(userId);
+    await notificationService.markAllAsRead(userId);
 
     res.json({
       success: true,
-      data: preferences,
+      message: 'All notifications marked as read',
     });
   } catch (error) {
-    next(error);
-  }
-});
-
-// =============================================================================
-// PUT /api/notifications/preferences - Update notification preferences
-// =============================================================================
-const updatePreferencesSchema = z.object({
-  sms: z.boolean().optional(),
-  email: z.boolean().optional(),
-  push: z.boolean().optional(),
-});
-
-router.put('/preferences', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const userId = req.user!.userId;
-    const validatedData = updatePreferencesSchema.parse(req.body);
-
-    await notificationService.updatePreferences(userId, validatedData);
-    const newPreferences = await notificationService.getPreferences(userId);
-
-    res.json({
-      success: true,
-      data: newPreferences,
-      message: 'Notification preferences updated',
-    });
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json({
-        success: false,
-        error: {
-          code: 'VALIDATION_ERROR',
-          message: 'Invalid preferences data',
-          details: error.errors,
-        },
-      });
-    }
     next(error);
   }
 });
@@ -192,9 +158,7 @@ router.delete('/:id', async (req: Request, res: Response, next: NextFunction) =>
       });
     }
 
-    await prisma.notification.delete({
-      where: { id: notificationId },
-    });
+    await notificationService.delete(notificationId, userId);
 
     res.json({
       success: true,
@@ -218,7 +182,7 @@ router.delete('/', async (req: Request, res: Response, next: NextFunction) => {
 
     res.json({
       success: true,
-      message: `Deleted ${result.count} notifications`,
+      message: 'Deleted ' + result.count + ' notifications',
     });
   } catch (error) {
     next(error);
@@ -226,7 +190,7 @@ router.delete('/', async (req: Request, res: Response, next: NextFunction) => {
 });
 
 // =============================================================================
-// POST /api/notifications/test - Send a test notification (parent only)
+// POST /api/notifications/test - Create a test notification (parent only)
 // =============================================================================
 router.post('/test', async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -242,19 +206,16 @@ router.post('/test', async (req: Request, res: Response, next: NextFunction) => 
       });
     }
 
-    const { channel } = req.body;
-
-    await notificationService.createAndSend({
+    await notificationService.create({
       userId: user.userId,
       type: 'CHORE_REMINDER',
       title: 'Test Notification',
-      body: 'This is a test notification from ChoreChomper. If you received this, notifications are working!',
-      channels: channel ? [channel] : undefined,
+      body: 'This is a test notification from ChoreChomper. If you see this, in-app notifications are working!',
     });
 
     res.json({
       success: true,
-      message: 'Test notification sent',
+      message: 'Test notification created',
     });
   } catch (error) {
     next(error);
