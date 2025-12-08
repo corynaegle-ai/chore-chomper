@@ -246,3 +246,47 @@ export const rewardApi = {
   }) => api.put<ApiResponse<Reward>>(`/rewards/${id}`, data),
   delete: (id: string) => api.delete<ApiResponse>(`/rewards/${id}`),
 };
+
+
+// Redemption Types
+export interface Redemption {
+  id: string;
+  childId: string;
+  rewardId: string;
+  pointsSpent: number;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'FULFILLED';
+  notes?: string;
+  requestedAt: string;
+  reviewedAt?: string;
+  reviewedById?: string;
+  fulfilledAt?: string;
+  child?: {
+    id: string;
+    name: string;
+    avatarUrl?: string;
+  };
+  reward?: {
+    id: string;
+    name: string;
+    pointCost: number;
+    imageUrl?: string;
+  };
+  reviewedBy?: {
+    id: string;
+    name: string;
+  };
+}
+
+// Redemption API
+export const redemptionApi = {
+  getAll: (status?: string) =>
+    api.get<ApiResponse<Redemption[]>>("/redemptions", { params: status ? { status } : undefined }),
+  getPendingCount: () =>
+    api.get<ApiResponse<{ count: number }>>("/redemptions/pending"),
+  request: (data: { rewardId: string; notes?: string }) =>
+    api.post<ApiResponse<Redemption>>("/redemptions", data),
+  review: (id: string, data: { status: 'APPROVED' | 'REJECTED'; notes?: string }) =>
+    api.put<ApiResponse<Redemption>>(`/redemptions/${id}/review`, data),
+  fulfill: (id: string) =>
+    api.put<ApiResponse<Redemption>>(`/redemptions/${id}/fulfill`),
+};
