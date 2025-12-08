@@ -38,6 +38,82 @@ const updateNotificationPrefsSchema = z.object({
 });
 
 /**
+ * GET /api/users/me
+ * Get current authenticated user's profile
+ */
+router.get('/me', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.user!.id },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        avatarUrl: true,
+        avatarPreset: true,
+        pointsBalance: true,
+        phoneNumber: true,
+        notificationPreferences: true,
+        family: {
+          select: {
+            id: true,
+            name: true,
+            inviteCode: true,
+          },
+        },
+        createdAt: true,
+      },
+    });
+
+    if (!user) {
+      return res.status(404).json(errorResponse('USER_NOT_FOUND', 'User not found'));
+    }
+
+    res.json(successResponse(user));
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * PUT /api/users/me
+ * Update current authenticated user's profile
+ */
+router.put('/me', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const data = updateUserSchema.parse(req.body);
+
+    const updatedUser = await prisma.user.update({
+      where: { id: req.user!.id },
+      data: {
+        ...(data.name && { name: data.name }),
+        ...(data.phoneNumber !== undefined && { phoneNumber: data.phoneNumber }),
+        ...(data.avatarUrl !== undefined && { avatarUrl: data.avatarUrl }),
+        ...(data.avatarPreset !== undefined && { avatarPreset: data.avatarPreset }),
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        avatarUrl: true,
+        avatarPreset: true,
+        phoneNumber: true,
+        notificationPreferences: true,
+      },
+    });
+
+    res.json(successResponse(updatedUser, 'Profile updated successfully'));
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json(errorResponse('VALIDATION_ERROR', 'Invalid data', error.errors));
+    }
+    next(error);
+  }
+});
+
+/**
  * GET /api/users
  * List all family members
  */

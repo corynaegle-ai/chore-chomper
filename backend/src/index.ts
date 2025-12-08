@@ -18,6 +18,7 @@ import kudosRoutes from './routes/kudos.routes.js';
 import categoryRoutes from './routes/category.routes.js';
 import rewardRoutes from './routes/reward.routes.js';
 import redemptionRoutes from './routes/redemption.routes.js';
+import notificationRoutes from './routes/notification.routes.js';
 
 const app = express();
 
@@ -69,7 +70,7 @@ app.use('/api/categories', categoryRoutes);
 // app.use('/api/chore-templates', choreTemplateRoutes);
 app.use('/api/rewards', rewardRoutes);
 app.use('/api/redemptions', redemptionRoutes);
-// app.use('/api/notifications', notificationRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // Error handling
 app.use(notFoundHandler);
