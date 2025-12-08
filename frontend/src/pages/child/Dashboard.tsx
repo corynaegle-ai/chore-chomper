@@ -23,14 +23,14 @@ export default function ChildDashboard() {
       <header className="bg-white/80 backdrop-blur-sm shadow-sm sticky top-0 z-10">
         <div className="max-w-lg mx-auto px-4">
           <div className="flex justify-between items-center h-16">
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 flex-shrink-0">
               <Mascot size="md" />
               <span className="font-display font-bold text-chomper-600">
                 ChoreChomper
               </span>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 flex-shrink-0">
               {/* Points badge */}
               <div className="flex items-center gap-1 bg-yellow-100 px-3 py-1.5 rounded-full">
                 <Star className="w-4 h-4 text-yellow-500 fill-yellow-500" />
