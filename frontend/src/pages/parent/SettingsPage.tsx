@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Bell, Mail, Smartphone, Loader2, Save, TestTube, Check, User, Phone } from 'lucide-react';
+import { Bell, Mail, Smartphone, Loader2, Save, Check, User, Phone } from 'lucide-react';
 import { api } from '../../api/client';
 
 interface NotificationPreferences {
@@ -87,13 +87,14 @@ export default function SettingsPage() {
     try {
       setTesting(channel);
       await api.post('/notifications/test', { channel: channel.toUpperCase() });
-      setMessage({ type: 'success', text: \`Test \${channel} sent! Check your \${channel === 'email' ? 'inbox' : 'phone'}.\` });
+      const destination = channel === 'email' ? 'inbox' : 'phone';
+      setMessage({ type: 'success', text: 'Test ' + channel + ' sent! Check your ' + destination + '.' });
       setTimeout(() => setMessage(null), 5000);
     } catch (error: any) {
       console.error('Failed to send test:', error);
       setMessage({ 
         type: 'error', 
-        text: error.response?.data?.error?.message || \`Failed to send test \${channel}\` 
+        text: error.response?.data?.error?.message || 'Failed to send test ' + channel
       });
     } finally {
       setTesting(null);
@@ -120,7 +121,7 @@ export default function SettingsPage() {
       </h1>
 
       {message && (
-        <div className={\`p-4 rounded-lg \${message.type === 'success' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}\`}>
+        <div className={'p-4 rounded-lg ' + (message.type === 'success' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200')}>
           {message.text}
         </div>
       )}
@@ -194,9 +195,9 @@ export default function SettingsPage() {
             <div className="flex items-center gap-3">
               <button
                 onClick={() => togglePreference('email')}
-                className={\`relative w-12 h-6 rounded-full transition-colors \${preferences.email ? 'bg-primary-500' : 'bg-gray-300'}\`}
+                className={'relative w-12 h-6 rounded-full transition-colors ' + (preferences.email ? 'bg-primary-500' : 'bg-gray-300')}
               >
-                <span className={\`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform \${preferences.email ? 'translate-x-6' : ''}\`} />
+                <span className={'absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ' + (preferences.email ? 'translate-x-6' : '')} />
               </button>
               <button
                 onClick={() => sendTestNotification('email')}
@@ -221,9 +222,9 @@ export default function SettingsPage() {
               <button
                 onClick={() => togglePreference('sms')}
                 disabled={!phoneNumber}
-                className={\`relative w-12 h-6 rounded-full transition-colors \${preferences.sms && phoneNumber ? 'bg-primary-500' : 'bg-gray-300'}\`}
+                className={'relative w-12 h-6 rounded-full transition-colors ' + (preferences.sms && phoneNumber ? 'bg-primary-500' : 'bg-gray-300')}
               >
-                <span className={\`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform \${preferences.sms && phoneNumber ? 'translate-x-6' : ''}\`} />
+                <span className={'absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ' + (preferences.sms && phoneNumber ? 'translate-x-6' : '')} />
               </button>
               <button
                 onClick={() => sendTestNotification('sms')}
