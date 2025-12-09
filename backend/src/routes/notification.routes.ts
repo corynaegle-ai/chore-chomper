@@ -12,6 +12,105 @@ const prisma = new PrismaClient();
 router.use(authenticate);
 
 // =============================================================================
+// GET /api/notifications/preferences - Get notification preferences
+// =============================================================================
+router.get('/preferences', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { notificationPreferences: true },
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message: 'User not found' },
+      });
+    }
+
+    // Parse JSON preferences or use defaults
+    const defaults = { sms: true, email: true, push: false };
+    let prefs = defaults;
+    
+    if (user.notificationPreferences) {
+      try {
+        prefs = typeof user.notificationPreferences === 'string' 
+          ? JSON.parse(user.notificationPreferences)
+          : user.notificationPreferences as typeof defaults;
+      } catch {
+        prefs = defaults;
+      }
+    }
+
+    res.json({
+      success: true,
+      data: prefs,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// =============================================================================
+// PUT /api/notifications/preferences - Update notification preferences
+// =============================================================================
+const preferencesSchema = z.object({
+  sms: z.boolean().optional(),
+  email: z.boolean().optional(),
+  push: z.boolean().optional(),
+});
+
+router.put('/preferences', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const parsed = preferencesSchema.safeParse(req.body);
+
+    if (!parsed.success) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'VALIDATION_ERROR', message: 'Invalid preferences', details: parsed.error.errors },
+      });
+    }
+
+    // Get current preferences
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { notificationPreferences: true },
+    });
+
+    const defaults = { sms: true, email: true, push: false };
+    let currentPrefs = defaults;
+    
+    if (user?.notificationPreferences) {
+      try {
+        currentPrefs = typeof user.notificationPreferences === 'string'
+          ? JSON.parse(user.notificationPreferences)
+          : user.notificationPreferences as typeof defaults;
+      } catch {
+        currentPrefs = defaults;
+      }
+    }
+
+    // Merge with new values
+    const newPrefs = { ...currentPrefs, ...parsed.data };
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: { notificationPreferences: newPrefs },
+    });
+
+    res.json({
+      success: true,
+      data: newPrefs,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// =============================================================================
 // GET /api/notifications - List user's notifications
 // =============================================================================
 router.get('/', async (req: Request, res: Response, next: NextFunction) => {
@@ -103,21 +202,14 @@ router.put('/:id/read', async (req: Request, res: Response, next: NextFunction) 
     const userId = req.user!.userId;
     const notificationId = req.params.id;
 
-    // Verify notification belongs to user
     const notification = await prisma.notification.findFirst({
-      where: {
-        id: notificationId,
-        userId,
-      },
+      where: { id: notificationId, userId },
     });
 
     if (!notification) {
       return res.status(404).json({
         success: false,
-        error: {
-          code: 'NOT_FOUND',
-          message: 'Notification not found',
-        },
+        error: { code: 'NOT_FOUND', message: 'Notification not found' },
       });
     }
 
@@ -140,21 +232,14 @@ router.delete('/:id', async (req: Request, res: Response, next: NextFunction) =>
     const userId = req.user!.userId;
     const notificationId = req.params.id;
 
-    // Verify notification belongs to user
     const notification = await prisma.notification.findFirst({
-      where: {
-        id: notificationId,
-        userId,
-      },
+      where: { id: notificationId, userId },
     });
 
     if (!notification) {
       return res.status(404).json({
         success: false,
-        error: {
-          code: 'NOT_FOUND',
-          message: 'Notification not found',
-        },
+        error: { code: 'NOT_FOUND', message: 'Notification not found' },
       });
     }
 
@@ -190,7 +275,7 @@ router.delete('/', async (req: Request, res: Response, next: NextFunction) => {
 });
 
 // =============================================================================
-// POST /api/notifications/test - Create a test notification (parent only)
+// POST /api/notifications/test - Send test notification (parent only)
 // =============================================================================
 router.post('/test', async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -199,23 +284,24 @@ router.post('/test', async (req: Request, res: Response, next: NextFunction) => 
     if (user.role !== 'PARENT') {
       return res.status(403).json({
         success: false,
-        error: {
-          code: 'FORBIDDEN',
-          message: 'Only parents can send test notifications',
-        },
+        error: { code: 'FORBIDDEN', message: 'Only parents can send test notifications' },
       });
     }
 
+    const { channel } = req.body;
+
+    // For now, just create an in-app notification
+    // Future: integrate actual SMS/email services
     await notificationService.create({
       userId: user.userId,
       type: 'CHORE_REMINDER',
       title: 'Test Notification',
-      body: 'This is a test notification from ChoreChomper. If you see this, in-app notifications are working!',
+      body: 'This is a test notification from ChoreChomper. If you see this, notifications are working!',
     });
 
     res.json({
       success: true,
-      message: 'Test notification created',
+      message: 'Test notification sent',
     });
   } catch (error) {
     next(error);
