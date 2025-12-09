@@ -51,6 +51,7 @@ api.interceptors.response.use(
 export interface ApiResponse<T = unknown> {
   success: boolean;
   data?: T;
+  message?: string;
   error?: { code: string; message: string; details?: unknown };
 }
 
@@ -87,7 +88,6 @@ export interface Category {
   };
 }
 
-
 export interface Chore {
   id: string;
   name: string;
@@ -100,7 +100,9 @@ export interface Chore {
   photoUrl?: string;
   completionNotes?: string;
   verificationNotes?: string;
-  assignedTo: {
+  isBonus?: boolean;
+  claimedAt?: string;
+  assignedTo?: {
     id: string;
     name: string;
     avatarPreset?: string;
@@ -123,6 +125,7 @@ export interface FamilyStats {
   };
   pendingRedemptions: number;
 }
+
 
 // Auth API
 export const authApi = {
@@ -162,28 +165,32 @@ export const familyApi = {
 
 // Chore API
 export const choreApi = {
-  getAll: (params?: { status?: string; assignedToId?: string; categoryId?: string }) =>
+  getAll: (params?: { status?: string; assignedToId?: string; categoryId?: string; available?: string }) =>
     api.get<ApiResponse<Chore[]>>("/chores", { params }),
   getById: (id: string) => api.get<ApiResponse<Chore>>(`/chores/${id}`),
   getMy: (status?: string) =>
     api.get<ApiResponse<Chore[]>>("/chores/my", { params: status ? { status } : undefined }),
+  getAvailable: () => api.get<ApiResponse<Chore[]>>("/chores/available"),
   getPendingVerification: () => api.get<ApiResponse<Chore[]>>("/chores/pending-verification"),
   create: (data: {
     name: string;
     description?: string;
     categoryId?: string;
-    assignedToId: string;
+    assignedToId?: string; // Optional - null means available to all
     pointValue?: number;
     dueDate?: string;
+    isBonus?: boolean;
   }) => api.post<ApiResponse<Chore>>("/chores", data),
   update: (id: string, data: {
     name?: string;
     description?: string;
     categoryId?: string | null;
-    assignedToId?: string;
+    assignedToId?: string | null; // Can set to null to make available
     pointValue?: number;
     dueDate?: string | null;
+    isBonus?: boolean;
   }) => api.put<ApiResponse<Chore>>(`/chores/${id}`, data),
+  claim: (id: string) => api.post<ApiResponse<Chore>>(`/chores/${id}/claim`),
   complete: (id: string, data?: { photoUrl?: string; notes?: string }) =>
     api.post<ApiResponse<Chore>>(`/chores/${id}/complete`, data || {}),
   addPhoto: (id: string, photoUrl: string) =>
@@ -205,6 +212,7 @@ export const categoryApi = {
     api.put<ApiResponse<Category>>(`/categories/${id}`, data),
   delete: (id: string) => api.delete<ApiResponse>(`/categories/${id}`),
 };
+
 
 // Reward Types
 export interface Reward {
@@ -247,7 +255,6 @@ export const rewardApi = {
   delete: (id: string) => api.delete<ApiResponse>(`/rewards/${id}`),
 };
 
-
 // Redemption Types
 export interface Redemption {
   id: string;
@@ -260,21 +267,9 @@ export interface Redemption {
   reviewedAt?: string;
   reviewedById?: string;
   fulfilledAt?: string;
-  child?: {
-    id: string;
-    name: string;
-    avatarUrl?: string;
-  };
-  reward?: {
-    id: string;
-    name: string;
-    pointCost: number;
-    imageUrl?: string;
-  };
-  reviewedBy?: {
-    id: string;
-    name: string;
-  };
+  child?: { id: string; name: string; avatarUrl?: string };
+  reward?: { id: string; name: string; pointCost: number; imageUrl?: string };
+  reviewedBy?: { id: string; name: string };
 }
 
 // Redemption API

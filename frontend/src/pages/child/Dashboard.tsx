@@ -1,11 +1,12 @@
 import Mascot from '../../components/Mascot';
 import { Routes, Route, NavLink, Navigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { Trophy, Gift, Star, LogOut, Home } from 'lucide-react';
+import { Trophy, Gift, Star, LogOut, Home, Zap } from 'lucide-react';
 import MyChores from './MyChores';
 import Rewards from './Rewards';
 import Stats from './Stats';
 import ChildHome from './ChildHome';
+import AvailableChores from './AvailableChores';
 
 export default function ChildDashboard() {
   const { user, logout } = useAuth();
@@ -13,6 +14,7 @@ export default function ChildDashboard() {
   const navItems = [
     { to: '/child', icon: Home, label: 'Home', end: true },
     { to: '/child/chores', icon: Trophy, label: 'Chores' },
+    { to: '/child/available', icon: Zap, label: 'Bonus' },
     { to: '/child/rewards', icon: Gift, label: 'Rewards' },
     { to: '/child/stats', icon: Star, label: 'Stats' },
   ];
@@ -56,6 +58,7 @@ export default function ChildDashboard() {
         <Routes>
           <Route index element={<ChildHome />} />
           <Route path="chores" element={<MyChores />} />
+          <Route path="available" element={<AvailableChores />} />
           <Route path="rewards" element={<Rewards />} />
           <Route path="stats" element={<Stats />} />
           <Route path="*" element={<Navigate to="/child" replace />} />
@@ -72,14 +75,14 @@ export default function ChildDashboard() {
                 to={item.to}
                 end={item.end}
                 className={({ isActive }) =>
-                  `flex flex-col items-center gap-1 px-4 py-2 rounded-lg transition-colors ${
+                  `flex flex-col items-center gap-1 px-3 py-2 rounded-lg transition-colors ${
                     isActive
                       ? 'text-chomper-600 bg-chomper-50'
                       : 'text-gray-400 hover:text-gray-600'
                   }`
                 }
               >
-                <item.icon className="w-6 h-6" />
+                <item.icon className="w-5 h-5" />
                 <span className="text-xs font-medium">{item.label}</span>
               </NavLink>
             ))}

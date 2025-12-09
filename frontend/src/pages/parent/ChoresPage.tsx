@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plus, X, Loader2, Calendar, Trash2, Edit2 } from 'lucide-react';
+import { Plus, X, Loader2, Trash2, Edit2, Zap } from 'lucide-react';
 import { choreApi, userApi, Chore, User } from '../../api/client';
 
 const STATUS_COLORS: Record<string, string> = {
@@ -20,7 +20,8 @@ export default function ChoresPage() {
   const [filter, setFilter] = useState<string>('all');
 
   const [formData, setFormData] = useState({
-    name: '', description: '', assignedToId: '', pointValue: 10, dueDate: ''
+    name: '', description: '', assignedToId: '', pointValue: 10, dueDate: '',
+    isAvailable: false, isBonus: false
   });
 
   useEffect(() => { loadData(); }, []);
@@ -41,19 +42,25 @@ export default function ChoresPage() {
   };
 
   const openAddModal = () => {
-    setFormData({ name: '', description: '', assignedToId: children[0]?.id || '', pointValue: 10, dueDate: '' });
+    setFormData({ 
+      name: '', description: '', assignedToId: '', pointValue: 10, dueDate: '',
+      isAvailable: false, isBonus: false
+    });
     setEditingChore(null);
     setShowModal(true);
     setError('');
   };
 
   const openEditModal = (chore: Chore) => {
+    const isAvailable = !chore.assignedTo;
     setFormData({
       name: chore.name,
       description: chore.description || '',
-      assignedToId: chore.assignedTo.id,
+      assignedToId: chore.assignedTo?.id || '',
       pointValue: chore.pointValue,
       dueDate: chore.dueDate ? new Date(chore.dueDate).toISOString().split('T')[0] : '',
+      isAvailable,
+      isBonus: chore.isBonus || false
     });
     setEditingChore(chore);
     setShowModal(true);
@@ -62,8 +69,8 @@ export default function ChoresPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.assignedToId) {
-      setError('Please select a child');
+    if (!formData.isAvailable && !formData.assignedToId) {
+      setError('Please select a child or make the chore available to all');
       return;
     }
 
@@ -72,13 +79,17 @@ export default function ChoresPage() {
       const payload = {
         name: formData.name,
         description: formData.description || undefined,
-        assignedToId: formData.assignedToId,
+        assignedToId: formData.isAvailable ? undefined : formData.assignedToId,
         pointValue: formData.pointValue,
         dueDate: formData.dueDate ? new Date(formData.dueDate).toISOString() : undefined,
+        isBonus: formData.isBonus
       };
 
       if (editingChore) {
-        await choreApi.update(editingChore.id, payload);
+        await choreApi.update(editingChore.id, {
+          ...payload,
+          assignedToId: formData.isAvailable ? null : formData.assignedToId
+        });
       } else {
         await choreApi.create(payload);
       }
@@ -101,7 +112,11 @@ export default function ChoresPage() {
     }
   };
 
-  const filteredChores = chores.filter(c => filter === 'all' || c.status === filter);
+  const filteredChores = chores.filter(c => {
+    if (filter === 'all') return true;
+    if (filter === 'available') return !c.assignedTo;
+    return c.status === filter;
+  });
 
   if (loading) {
     return <div className="flex items-center justify-center h-64"><Loader2 className="w-8 h-8 animate-spin text-chomper-500" /></div>;
@@ -114,22 +129,19 @@ export default function ChoresPage() {
         <div className="flex gap-2 w-full sm:w-auto">
           <select value={filter} onChange={(e) => setFilter(e.target.value)} className="input flex-1 sm:flex-none">
             <option value="all">All Chores</option>
+            <option value="available">Available (Bonus)</option>
             <option value="PENDING">Pending</option>
             <option value="COMPLETED">Awaiting Review</option>
             <option value="VERIFIED">Verified</option>
             <option value="REJECTED">Rejected</option>
           </select>
-          <button onClick={openAddModal} disabled={children.length === 0} className="btn btn-primary flex items-center gap-2">
+          <button onClick={openAddModal} className="btn btn-primary flex items-center gap-2">
             <Plus className="w-4 h-4" /> Add Chore
           </button>
         </div>
       </div>
 
-      {children.length === 0 ? (
-        <div className="card p-8 text-center">
-          <p className="text-gray-500">Add a child first before creating chores!</p>
-        </div>
-      ) : filteredChores.length === 0 ? (
+      {filteredChores.length === 0 ? (
         <div className="card p-12 text-center">
           <div className="text-6xl mb-4">📋</div>
           <h2 className="text-xl font-semibold mb-2">No chores yet</h2>
@@ -154,14 +166,29 @@ export default function ChoresPage() {
                 {filteredChores.map((chore) => (
                   <tr key={chore.id} className="hover:bg-gray-50">
                     <td className="p-4">
-                      <p className="font-medium">{chore.name}</p>
-                      {chore.description && <p className="text-sm text-gray-500 truncate max-w-xs">{chore.description}</p>}
+                      <div className="flex items-center gap-2">
+                        {chore.isBonus && (
+                          <span className="text-xs bg-yellow-400 text-yellow-900 px-1.5 py-0.5 rounded font-bold">
+                            <Zap className="w-3 h-3 inline" />
+                          </span>
+                        )}
+                        <div>
+                          <p className="font-medium">{chore.name}</p>
+                          {chore.description && <p className="text-sm text-gray-500 truncate max-w-xs">{chore.description}</p>}
+                        </div>
+                      </div>
                     </td>
                     <td className="p-4">
-                      <div className="flex items-center gap-2">
-                        <span className="text-lg">{chore.assignedTo.avatarPreset || '👤'}</span>
-                        <span>{chore.assignedTo.name}</span>
-                      </div>
+                      {chore.assignedTo ? (
+                        <div className="flex items-center gap-2">
+                          <span className="text-lg">{chore.assignedTo.avatarPreset || '👤'}</span>
+                          <span>{chore.assignedTo.name}</span>
+                        </div>
+                      ) : (
+                        <span className="px-2 py-1 rounded-full text-xs font-medium bg-gradient-to-r from-yellow-100 to-orange-100 text-orange-700">
+                          Available to all
+                        </span>
+                      )}
                     </td>
                     <td className="p-4 font-medium text-chomper-600">{chore.pointValue}</td>
                     <td className="p-4 text-sm text-gray-500">
@@ -218,16 +245,51 @@ export default function ChoresPage() {
                   className="input w-full" rows={2} placeholder="Extra details..." />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium mb-1">Assign To</label>
-                <select value={formData.assignedToId} onChange={(e) => setFormData({ ...formData, assignedToId: e.target.value })}
-                  className="input w-full" required>
-                  <option value="">Select a child</option>
-                  {children.map((child) => (
-                    <option key={child.id} value={child.id}>{child.avatarPreset} {child.name}</option>
-                  ))}
-                </select>
+              {/* Available to all checkbox */}
+              <div className="bg-gradient-to-r from-yellow-50 to-orange-50 border border-yellow-200 rounded-lg p-3">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input 
+                    type="checkbox" 
+                    checked={formData.isAvailable}
+                    onChange={(e) => setFormData({ ...formData, isAvailable: e.target.checked, assignedToId: '' })}
+                    className="w-4 h-4 text-chomper-600 rounded focus:ring-chomper-500"
+                  />
+                  <div>
+                    <span className="font-medium text-gray-800 flex items-center gap-1">
+                      <Zap className="w-4 h-4 text-yellow-500" />
+                      Available to all children
+                    </span>
+                    <p className="text-xs text-gray-500">Kids can claim this chore for bonus points</p>
+                  </div>
+                </label>
               </div>
+
+              {/* Bonus badge (only when available) */}
+              {formData.isAvailable && (
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input 
+                    type="checkbox" 
+                    checked={formData.isBonus}
+                    onChange={(e) => setFormData({ ...formData, isBonus: e.target.checked })}
+                    className="w-4 h-4 text-yellow-500 rounded focus:ring-yellow-400"
+                  />
+                  <span className="text-sm">Mark as <span className="font-bold text-yellow-600">BONUS</span> chore (highlighted for kids)</span>
+                </label>
+              )}
+
+              {/* Assignee dropdown (hidden when available) */}
+              {!formData.isAvailable && (
+                <div>
+                  <label className="block text-sm font-medium mb-1">Assign To</label>
+                  <select value={formData.assignedToId} onChange={(e) => setFormData({ ...formData, assignedToId: e.target.value })}
+                    className="input w-full" required={!formData.isAvailable}>
+                    <option value="">Select a child</option>
+                    {children.map((child) => (
+                      <option key={child.id} value={child.id}>{child.avatarPreset} {child.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
