@@ -18,19 +18,21 @@ const createChoreSchema = z.object({
   name: z.string().min(1).max(100),
   description: z.string().max(500).optional(),
   categoryId: z.string().uuid().optional(),
-  assignedToId: z.string().uuid(),
+  assignedToId: z.string().uuid().optional(), // Optional - null means "available to all"
   pointValue: z.number().int().min(0).default(0),
   dueDate: z.string().datetime().optional(),
   templateId: z.string().uuid().optional(),
+  isBonus: z.boolean().default(false), // Mark as bonus/extra credit chore
 });
 
 const updateChoreSchema = z.object({
   name: z.string().min(1).max(100).optional(),
   description: z.string().max(500).optional(),
   categoryId: z.string().uuid().nullable().optional(),
-  assignedToId: z.string().uuid().optional(),
+  assignedToId: z.string().uuid().nullable().optional(), // Can set to null to make available
   pointValue: z.number().int().min(0).optional(),
   dueDate: z.string().datetime().nullable().optional(),
+  isBonus: z.boolean().optional(),
 });
 
 const completeChoreSchema = z.object({
@@ -44,8 +46,8 @@ const addPhotoSchema = z.object({
 
 const verifyChoreSchema = z.object({
   approved: z.boolean(),
-  feedback: z.string().max(500).optional(), // Notes to child explaining approval or what needs to be fixed
-  pointsPenalty: z.number().int().min(0).optional(), // Optional points to deduct on rejection
+  feedback: z.string().max(500).optional(),
+  pointsPenalty: z.number().int().min(0).optional(),
 });
 
 // ===================
@@ -55,11 +57,10 @@ const verifyChoreSchema = z.object({
 /**
  * GET /api/chores
  * List all chores for the family
- * Query params: status, assignedToId, categoryId, dueBefore, dueAfter
  */
 router.get('/', async (req: AuthRequest, res: Response) => {
   try {
-    const { status, assignedToId, categoryId, dueBefore, dueAfter } = req.query;
+    const { status, assignedToId, categoryId, dueBefore, dueAfter, available } = req.query;
 
     const where: any = {
       familyId: req.user!.familyId,
@@ -69,7 +70,10 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       where.status = status as ChoreStatus;
     }
 
-    if (assignedToId) {
+    // Filter for available (unassigned) chores
+    if (available === 'true') {
+      where.assignedToId = null;
+    } else if (assignedToId) {
       where.assignedToId = assignedToId as string;
     }
 
@@ -116,6 +120,44 @@ router.get('/', async (req: AuthRequest, res: Response) => {
 });
 
 /**
+ * GET /api/chores/available
+ * List all available (unassigned) chores that children can claim
+ */
+router.get('/available', async (req: AuthRequest, res: Response) => {
+  try {
+    const chores = await prisma.chore.findMany({
+      where: {
+        familyId: req.user!.familyId,
+        assignedToId: null, // Only unassigned chores
+        status: ChoreStatus.PENDING, // Only pending chores can be claimed
+      },
+      include: {
+        category: {
+          select: { id: true, name: true, color: true, icon: true },
+        },
+      },
+      orderBy: [
+        { isBonus: 'desc' }, // Bonus chores first
+        { pointValue: 'desc' }, // Higher points first
+        { dueDate: 'asc' },
+        { createdAt: 'desc' },
+      ],
+    });
+
+    res.json({
+      success: true,
+      data: chores,
+    });
+  } catch (error) {
+    console.error('Get available chores error:', error);
+    res.status(500).json({
+      success: false,
+      error: { code: 'SERVER_ERROR', message: 'Failed to fetch available chores' },
+    });
+  }
+});
+
+/**
  * GET /api/chores/my
  * Get chores assigned to the current user (for children)
  */
@@ -140,7 +182,7 @@ router.get('/my', async (req: AuthRequest, res: Response) => {
         },
       },
       orderBy: [
-        { status: 'asc' }, // PENDING first
+        { status: 'asc' },
         { dueDate: 'asc' },
       ],
     });
@@ -157,6 +199,7 @@ router.get('/my', async (req: AuthRequest, res: Response) => {
     });
   }
 });
+
 
 /**
  * GET /api/chores/pending-verification
@@ -248,19 +291,23 @@ router.post('/', requireParent, async (req: AuthRequest, res: Response) => {
   try {
     const data = createChoreSchema.parse(req.body);
 
-    // Verify assigned user belongs to the family
-    const assignee = await prisma.user.findFirst({
-      where: {
-        id: data.assignedToId,
-        familyId: req.user!.familyId,
-      },
-    });
-
-    if (!assignee) {
-      return res.status(400).json({
-        success: false,
-        error: { code: 'INVALID_ASSIGNEE', message: 'Assigned user not found in family' },
+    // Verify assigned user belongs to the family (if provided)
+    let assigneeName: string | null = null;
+    if (data.assignedToId) {
+      const assignee = await prisma.user.findFirst({
+        where: {
+          id: data.assignedToId,
+          familyId: req.user!.familyId,
+        },
       });
+
+      if (!assignee) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'INVALID_ASSIGNEE', message: 'Assigned user not found in family' },
+        });
+      }
+      assigneeName = assignee.name;
     }
 
     // Verify category belongs to the family (if provided)
@@ -286,10 +333,10 @@ router.post('/', requireParent, async (req: AuthRequest, res: Response) => {
         name: data.name,
         description: data.description,
         categoryId: data.categoryId,
-        assignedToId: data.assignedToId,
+        assignedToId: data.assignedToId || null, // null = available to all
         pointValue: data.pointValue,
         dueDate: data.dueDate ? new Date(data.dueDate) : null,
-        requiresPhoto: data.requiresPhoto,
+        isBonus: data.isBonus || false,
         templateId: data.templateId,
         status: ChoreStatus.PENDING,
       },
@@ -311,7 +358,12 @@ router.post('/', requireParent, async (req: AuthRequest, res: Response) => {
         action: 'CHORE_CREATED',
         targetType: 'CHORE',
         targetId: chore.id,
-        details: { choreName: chore.name, assignedTo: assignee.name },
+        details: { 
+          choreName: chore.name, 
+          assignedTo: assigneeName,
+          isAvailable: !data.assignedToId,
+          isBonus: data.isBonus,
+        },
       },
     });
 
@@ -334,6 +386,90 @@ router.post('/', requireParent, async (req: AuthRequest, res: Response) => {
   }
 });
 
+
+/**
+ * POST /api/chores/:id/claim
+ * Child claims an available chore
+ */
+router.post('/:id/claim', async (req: AuthRequest, res: Response) => {
+  try {
+    const chore = await prisma.chore.findFirst({
+      where: {
+        id: req.params.id,
+        familyId: req.user!.familyId,
+      },
+    });
+
+    if (!chore) {
+      return res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message: 'Chore not found' },
+      });
+    }
+
+    // Check if chore is available (unassigned)
+    if (chore.assignedToId !== null) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'ALREADY_CLAIMED', message: 'This chore has already been claimed' },
+      });
+    }
+
+    // Check if chore is in pending status
+    if (chore.status !== ChoreStatus.PENDING) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'INVALID_STATUS', message: 'This chore is no longer available' },
+      });
+    }
+
+    // Claim the chore
+    const updatedChore = await prisma.chore.update({
+      where: { id: req.params.id },
+      data: {
+        assignedToId: req.user!.id,
+        claimedAt: new Date(),
+      },
+      include: {
+        assignedTo: {
+          select: { id: true, name: true, avatarPreset: true },
+        },
+        category: {
+          select: { id: true, name: true, color: true, icon: true },
+        },
+      },
+    });
+
+    // Log activity
+    await prisma.activityLog.create({
+      data: {
+        familyId: req.user!.familyId,
+        userId: req.user!.id,
+        action: 'CHORE_CLAIMED',
+        targetType: 'CHORE',
+        targetId: chore.id,
+        details: { 
+          choreName: chore.name,
+          pointValue: chore.pointValue,
+          isBonus: chore.isBonus,
+        },
+      },
+    });
+
+    res.json({
+      success: true,
+      data: updatedChore,
+      message: `You claimed "${chore.name}" for ${chore.pointValue} points!`,
+    });
+  } catch (error) {
+    console.error('Claim chore error:', error);
+    res.status(500).json({
+      success: false,
+      error: { code: 'SERVER_ERROR', message: 'Failed to claim chore' },
+    });
+  }
+});
+
 /**
  * PUT /api/chores/:id
  * Update a chore (parents only)
@@ -342,7 +478,6 @@ router.put('/:id', requireParent, async (req: AuthRequest, res: Response) => {
   try {
     const data = updateChoreSchema.parse(req.body);
 
-    // Find existing chore
     const existingChore = await prisma.chore.findFirst({
       where: {
         id: req.params.id,
@@ -357,7 +492,6 @@ router.put('/:id', requireParent, async (req: AuthRequest, res: Response) => {
       });
     }
 
-    // Can't update verified/rejected chores
     if (existingChore.status === ChoreStatus.VERIFIED || existingChore.status === ChoreStatus.REJECTED) {
       return res.status(400).json({
         success: false,
@@ -382,7 +516,6 @@ router.put('/:id', requireParent, async (req: AuthRequest, res: Response) => {
       }
     }
 
-    // Verify category if changing
     if (data.categoryId) {
       const category = await prisma.category.findFirst({
         where: {
@@ -399,12 +532,20 @@ router.put('/:id', requireParent, async (req: AuthRequest, res: Response) => {
       }
     }
 
+    // Handle clearing claimedAt if making chore available again
+    const updateData: any = {
+      ...data,
+      dueDate: data.dueDate === null ? null : data.dueDate ? new Date(data.dueDate) : undefined,
+    };
+    
+    // If assignedToId is set to null, clear claimedAt as well
+    if (data.assignedToId === null) {
+      updateData.claimedAt = null;
+    }
+
     const chore = await prisma.chore.update({
       where: { id: req.params.id },
-      data: {
-        ...data,
-        dueDate: data.dueDate === null ? null : data.dueDate ? new Date(data.dueDate) : undefined,
-      },
+      data: updateData,
       include: {
         assignedTo: {
           select: { id: true, name: true, avatarPreset: true },
@@ -434,6 +575,7 @@ router.put('/:id', requireParent, async (req: AuthRequest, res: Response) => {
   }
 });
 
+
 /**
  * POST /api/chores/:id/complete
  * Mark a chore as completed (assigned child only)
@@ -456,7 +598,6 @@ router.post('/:id/complete', async (req: AuthRequest, res: Response) => {
       });
     }
 
-    // Only assigned user can complete
     if (chore.assignedToId !== req.user!.id) {
       return res.status(403).json({
         success: false,
@@ -464,7 +605,6 @@ router.post('/:id/complete', async (req: AuthRequest, res: Response) => {
       });
     }
 
-    // Can complete PENDING chores or resubmit REJECTED chores
     if (chore.status !== ChoreStatus.PENDING && chore.status !== ChoreStatus.REJECTED) {
       return res.status(400).json({
         success: false,
@@ -479,21 +619,18 @@ router.post('/:id/complete', async (req: AuthRequest, res: Response) => {
 
     const isResubmission = chore.status === ChoreStatus.REJECTED;
 
-    // Photo is always optional - helps speed up parent verification but not required
     const updatedChore = await prisma.chore.update({
       where: { id: req.params.id },
       data: {
         status: ChoreStatus.COMPLETED,
         completedAt: new Date(),
-        photoUrl: data.photoUrl || chore.photoUrl, // Keep existing photo if not providing new one
+        photoUrl: data.photoUrl || chore.photoUrl,
         completionNotes: data.notes,
-        // Clear rejection data on resubmission
         verifiedAt: null,
         verifiedById: null,
       },
     });
 
-    // Log activity
     await prisma.activityLog.create({
       data: {
         familyId: req.user!.familyId,
@@ -527,7 +664,6 @@ router.post('/:id/complete', async (req: AuthRequest, res: Response) => {
 /**
  * POST /api/chores/:id/add-photo
  * Add or update photo on a completed chore (assigned child only)
- * Child can add photo even after marking chore complete
  */
 router.post('/:id/add-photo', async (req: AuthRequest, res: Response) => {
   try {
@@ -547,7 +683,6 @@ router.post('/:id/add-photo', async (req: AuthRequest, res: Response) => {
       });
     }
 
-    // Only assigned user can add photo
     if (chore.assignedToId !== req.user!.id) {
       return res.status(403).json({
         success: false,
@@ -555,7 +690,6 @@ router.post('/:id/add-photo', async (req: AuthRequest, res: Response) => {
       });
     }
 
-    // Can only add photo to COMPLETED or REJECTED chores (not PENDING or VERIFIED)
     if (chore.status !== ChoreStatus.COMPLETED && chore.status !== ChoreStatus.REJECTED) {
       return res.status(400).json({
         success: false,
@@ -570,9 +704,7 @@ router.post('/:id/add-photo', async (req: AuthRequest, res: Response) => {
 
     const updatedChore = await prisma.chore.update({
       where: { id: req.params.id },
-      data: {
-        photoUrl: data.photoUrl,
-      },
+      data: { photoUrl: data.photoUrl },
     });
 
     res.json({
@@ -595,10 +727,10 @@ router.post('/:id/add-photo', async (req: AuthRequest, res: Response) => {
   }
 });
 
+
 /**
  * POST /api/chores/:id/verify
  * Verify or reject a completed chore (parents only)
- * On rejection: sends chore back to child with notes, optional points penalty
  */
 router.post('/:id/verify', requireParent, async (req: AuthRequest, res: Response) => {
   try {
@@ -609,9 +741,7 @@ router.post('/:id/verify', requireParent, async (req: AuthRequest, res: Response
         id: req.params.id,
         familyId: req.user!.familyId,
       },
-      include: {
-        assignedTo: true,
-      },
+      include: { assignedTo: true },
     });
 
     if (!chore) {
@@ -621,7 +751,6 @@ router.post('/:id/verify', requireParent, async (req: AuthRequest, res: Response
       });
     }
 
-    // Can only verify completed chores
     if (chore.status !== ChoreStatus.COMPLETED) {
       return res.status(400).json({
         success: false,
@@ -629,22 +758,20 @@ router.post('/:id/verify', requireParent, async (req: AuthRequest, res: Response
       });
     }
 
-    // Validate points penalty doesn't exceed child's balance
     const pointsPenalty = data.pointsPenalty || 0;
     if (!data.approved && pointsPenalty > 0) {
-      if (pointsPenalty > chore.assignedTo.pointsBalance) {
+      if (pointsPenalty > chore.assignedTo!.pointsBalance) {
         return res.status(400).json({
           success: false,
           error: { 
             code: 'INSUFFICIENT_POINTS', 
-            message: `Cannot deduct ${pointsPenalty} points. ${chore.assignedTo.name} only has ${chore.assignedTo.pointsBalance} points.` 
+            message: `Cannot deduct ${pointsPenalty} points. ${chore.assignedTo!.name} only has ${chore.assignedTo!.pointsBalance} points.` 
           },
         });
       }
     }
 
     if (data.approved) {
-      // APPROVE: Mark as verified and award points
       const [updatedChore] = await prisma.$transaction([
         prisma.chore.update({
           where: { id: req.params.id },
@@ -655,22 +782,14 @@ router.post('/:id/verify', requireParent, async (req: AuthRequest, res: Response
             verificationNotes: data.feedback,
           },
         }),
-        // Award points if any
-        ...(chore.pointValue > 0
-          ? [
-              prisma.user.update({
-                where: { id: chore.assignedToId },
-                data: {
-                  pointsBalance: {
-                    increment: chore.pointValue,
-                  },
-                },
-              }),
-            ]
-          : []),
+        ...(chore.pointValue > 0 ? [
+          prisma.user.update({
+            where: { id: chore.assignedToId! },
+            data: { pointsBalance: { increment: chore.pointValue } },
+          }),
+        ] : []),
       ]);
 
-      // Log activity
       await prisma.activityLog.create({
         data: {
           familyId: req.user!.familyId,
@@ -680,7 +799,7 @@ router.post('/:id/verify', requireParent, async (req: AuthRequest, res: Response
           targetId: chore.id,
           details: {
             choreName: chore.name,
-            childName: chore.assignedTo.name,
+            childName: chore.assignedTo!.name,
             pointsAwarded: chore.pointValue,
           },
         },
@@ -689,10 +808,9 @@ router.post('/:id/verify', requireParent, async (req: AuthRequest, res: Response
       res.json({
         success: true,
         data: updatedChore,
-        message: `Chore verified! ${chore.pointValue} points awarded to ${chore.assignedTo.name}.`,
+        message: `Chore verified! ${chore.pointValue} points awarded to ${chore.assignedTo!.name}.`,
       });
     } else {
-      // REJECT: Send back to child with feedback, apply optional penalty
       const [updatedChore] = await prisma.$transaction([
         prisma.chore.update({
           where: { id: req.params.id },
@@ -701,27 +819,17 @@ router.post('/:id/verify', requireParent, async (req: AuthRequest, res: Response
             verifiedAt: new Date(),
             verifiedById: req.user!.id,
             verificationNotes: data.feedback,
-            // Clear completion data so child can redo
             completedAt: null,
-            // Keep the photo - child might want to update it
           },
         }),
-        // Deduct penalty points if specified
-        ...(pointsPenalty > 0
-          ? [
-              prisma.user.update({
-                where: { id: chore.assignedToId },
-                data: {
-                  pointsBalance: {
-                    decrement: pointsPenalty,
-                  },
-                },
-              }),
-            ]
-          : []),
+        ...(pointsPenalty > 0 ? [
+          prisma.user.update({
+            where: { id: chore.assignedToId! },
+            data: { pointsBalance: { decrement: pointsPenalty } },
+          }),
+        ] : []),
       ]);
 
-      // Log activity
       await prisma.activityLog.create({
         data: {
           familyId: req.user!.familyId,
@@ -731,23 +839,17 @@ router.post('/:id/verify', requireParent, async (req: AuthRequest, res: Response
           targetId: chore.id,
           details: {
             choreName: chore.name,
-            childName: chore.assignedTo.name,
+            childName: chore.assignedTo!.name,
             feedback: data.feedback,
-            pointsPenalty: pointsPenalty,
+            pointsPenalty,
           },
         },
       });
 
-      let message = `Chore sent back to ${chore.assignedTo.name} for redo.`;
-      if (pointsPenalty > 0) {
-        message += ` ${pointsPenalty} points deducted.`;
-      }
+      let message = `Chore sent back to ${chore.assignedTo!.name} for redo.`;
+      if (pointsPenalty > 0) message += ` ${pointsPenalty} points deducted.`;
 
-      res.json({
-        success: true,
-        data: updatedChore,
-        message,
-      });
+      res.json({ success: true, data: updatedChore, message });
     }
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -771,10 +873,7 @@ router.post('/:id/verify', requireParent, async (req: AuthRequest, res: Response
 router.post('/:id/reset', requireParent, async (req: AuthRequest, res: Response) => {
   try {
     const chore = await prisma.chore.findFirst({
-      where: {
-        id: req.params.id,
-        familyId: req.user!.familyId,
-      },
+      where: { id: req.params.id, familyId: req.user!.familyId },
     });
 
     if (!chore) {
@@ -784,7 +883,6 @@ router.post('/:id/reset', requireParent, async (req: AuthRequest, res: Response)
       });
     }
 
-    // Can only reset rejected chores
     if (chore.status !== ChoreStatus.REJECTED) {
       return res.status(400).json({
         success: false,
@@ -805,10 +903,7 @@ router.post('/:id/reset', requireParent, async (req: AuthRequest, res: Response)
       },
     });
 
-    res.json({
-      success: true,
-      data: updatedChore,
-    });
+    res.json({ success: true, data: updatedChore });
   } catch (error) {
     console.error('Reset chore error:', error);
     res.status(500).json({
@@ -818,18 +913,15 @@ router.post('/:id/reset', requireParent, async (req: AuthRequest, res: Response)
   }
 });
 
+
 /**
  * DELETE /api/chores/:id
  * Delete a chore (parents only)
- * Can delete any chore that isn't already verified
  */
 router.delete('/:id', requireParent, async (req: AuthRequest, res: Response) => {
   try {
     const chore = await prisma.chore.findFirst({
-      where: {
-        id: req.params.id,
-        familyId: req.user!.familyId,
-      },
+      where: { id: req.params.id, familyId: req.user!.familyId },
     });
 
     if (!chore) {
@@ -839,23 +931,15 @@ router.delete('/:id', requireParent, async (req: AuthRequest, res: Response) => 
       });
     }
 
-    // Prevent deleting verified chores (points already awarded)
     if (chore.status === ChoreStatus.VERIFIED) {
       return res.status(400).json({
         success: false,
-        error: { 
-          code: 'CANNOT_DELETE_VERIFIED', 
-          message: 'Cannot delete a verified chore. Points have already been awarded.' 
-        },
+        error: { code: 'CANNOT_DELETE_VERIFIED', message: 'Cannot delete a verified chore. Points have already been awarded.' },
       });
     }
 
-    // Delete the chore
-    await prisma.chore.delete({
-      where: { id: req.params.id },
-    });
+    await prisma.chore.delete({ where: { id: req.params.id } });
 
-    // Log activity
     await prisma.activityLog.create({
       data: {
         familyId: req.user!.familyId,
@@ -867,10 +951,7 @@ router.delete('/:id', requireParent, async (req: AuthRequest, res: Response) => 
       },
     });
 
-    res.json({
-      success: true,
-      message: 'Chore deleted successfully',
-    });
+    res.json({ success: true, message: 'Chore deleted successfully' });
   } catch (error) {
     console.error('Delete chore error:', error);
     res.status(500).json({
@@ -895,27 +976,18 @@ router.delete('/bulk', requireParent, async (req: AuthRequest, res: Response) =>
       });
     }
 
-    // Find all chores to delete
     const chores = await prisma.chore.findMany({
-      where: {
-        id: { in: ids },
-        familyId: req.user!.familyId,
-      },
+      where: { id: { in: ids }, familyId: req.user!.familyId },
     });
 
-    // Check for verified chores
     const verifiedChores = chores.filter(c => c.status === ChoreStatus.VERIFIED);
     if (verifiedChores.length > 0) {
       return res.status(400).json({
         success: false,
-        error: { 
-          code: 'CANNOT_DELETE_VERIFIED', 
-          message: `Cannot delete ${verifiedChores.length} verified chore(s). Points have already been awarded.` 
-        },
+        error: { code: 'CANNOT_DELETE_VERIFIED', message: `Cannot delete ${verifiedChores.length} verified chore(s).` },
       });
     }
 
-    // Delete all non-verified chores
     const deleteResult = await prisma.chore.deleteMany({
       where: {
         id: { in: ids },
@@ -924,7 +996,6 @@ router.delete('/bulk', requireParent, async (req: AuthRequest, res: Response) =>
       },
     });
 
-    // Log activity
     await prisma.activityLog.create({
       data: {
         familyId: req.user!.familyId,

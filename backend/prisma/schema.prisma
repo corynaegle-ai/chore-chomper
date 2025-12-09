@@ -180,7 +180,7 @@ model Chore {
   id                String      @id @default(uuid())
   templateId        String?     @map("template_id")
   familyId          String      @map("family_id")
-  assignedToId      String      @map("assigned_to_id")
+  assignedToId      String?     @map("assigned_to_id")
   categoryId        String?     @map("category_id")
   name              String      // Chore name/title
   description       String?
@@ -193,6 +193,8 @@ model Chore {
   verifiedAt        DateTime?   @map("verified_at")
   verifiedById      String?     @map("verified_by_id")
   verificationNotes String?     @map("verification_notes") // Feedback from parent (approval or rejection reason)
+  claimedAt         DateTime?   @map("claimed_at")
+  isBonus           Boolean     @default(false) @map("is_bonus")
   reminderSent      Boolean     @default(false) @map("reminder_sent")
   createdAt         DateTime    @default(now()) @map("created_at")
   updatedAt         DateTime    @updatedAt @map("updated_at")
@@ -200,7 +202,7 @@ model Chore {
   // Relations
   family     Family         @relation(fields: [familyId], references: [id], onDelete: Cascade)
   template   ChoreTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
-  assignedTo User           @relation("AssignedTo", fields: [assignedToId], references: [id], onDelete: Cascade)
+  assignedTo User?          @relation("AssignedTo", fields: [assignedToId], references: [id], onDelete: Cascade)
   category   Category?      @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   verifiedBy User?          @relation("VerifiedBy", fields: [verifiedById], references: [id], onDelete: SetNull)
 
